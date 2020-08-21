@@ -17,6 +17,8 @@ import time
 import numpy as np
 from pyrosetta import *
 from pyrosetta.rosetta import *
+from pyrosetta.rosetta.core.io.silent import (SilentFileData, 
+        SilentFileOptions)
 from pyrosetta.rosetta.core.chemical import aa_from_oneletter_code
 from pyrosetta.rosetta.core.pose import Pose, pose_residue_is_terminal
 from pyrosetta.rosetta.protocols.simple_moves import (MutateResidue, 
@@ -782,27 +784,13 @@ def residue_sap_list_maker(pose:Pose) -> list:
 
 ############### BEGIN MAIN FUNCTION ###########################
 
-for file in files:
-    if 'resurf_resurf' in file:
-        path = os.path.join(root, file)
-        pose = pyrosetta.io.pose_from_pdb(path)
-        residue_sap_list = residue_sap_list_maker(pose)
-        sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
-                                         reverse=True)
-        worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
-        print(file, "worst residues by SAP", worst_resis)
-        new_pose = fast_design_with_options(pose, to_design=worst_resis,
-                                    cutoffs=(20, 40), flexbb=False,
-                                    relax_script="MonomerDesign2019",
-                                    restraint=0, use_dssp=True,
-                                    use_sc_neighbors=False)
-        new_pose.dump_pdb("{}_resurf.pdb".format(path.replace(".pdb",'')))
 
-if ( silent != "" ):
-    sfd_in = rosetta.core.io.silent.SilentFileData(rosetta.core.io.silent.SilentFileOptions())
+if silent != "":
+    sfd_in = SilentFileData(SilentFileOptions())
     sfd_in.read_file(silent)
     pdbs = list(sfd_in.tags())
-    sfd_out = core.io.silent.SilentFileData( "out.silent", False, False, "binary", core.io.silent.SilentFileOptions())
+    sfd_out = SilentFileData("out.silent", False, False, "binary",
+            SilentFileOptions())
 
 
 num = -1
@@ -810,7 +798,6 @@ for pdb in pdbs:
     t0 = time.time()
     print("Attempting pose: " + pdb)
 
-    # try:
     for k in [1]:
         if ( silent == "" ):
             pose = pose_from_file(pdb)
@@ -818,43 +805,50 @@ for pdb in pdbs:
             pose = Pose()
             sfd_in.get_structure(pdb).fill_pose(pose)
 
-        name_no_suffix = my_rstrip(my_rstrip(os.path.basename(pdb), ".gz"), ".pdb")
-
+        name_no_suffix = my_rstrip(my_rstrip(os.path.basename(pdb), ".gz"),
+                ".pdb")
         sfd = core.io.raw_data.ScoreFileData("score.sc")
-
         score_map = std.map_std_string_double()
         string_map = std.map_std_string_std_string()
+        # get SAP score for the pose
+        print("prescoring SAP:")
+        pre_pose = sap_score(pose, name_no_suffix, score_map, string_map, "")
+        core.io.raw_data.ScoreMap.add_arbitrary_score_data_from_pose(pose,
+                score_map)
+        core.io.raw_data.ScoreMap.add_arbitrary_string_data_from_pose(pose,
+                string_map)
+        # use per residue SAP to make a list of the worst offenders
+        residue_sap_list = residue_sap_list_maker(pre_pose)
+        sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
+                                         reverse=True)
+        worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
+        print("worst residues by SAP", ' '.join(worst_resis))
+        # redesign a new pose targeting the worst residues
+        new_pose = fast_design_with_options(pre_pose, to_design=worst_resis,
+                cutoffs=(20, 40), flexbb=False,
+                relax_script="MonomerDesign2019", restraint=0, use_dssp=True,
+                use_sc_neighbors=False)
 
-
-        out_pose = sap_score(pose, name_no_suffix, score_map, string_map, "")
-
-
-        core.io.raw_data.ScoreMap.add_arbitrary_score_data_from_pose( pose, score_map)
-        core.io.raw_data.ScoreMap.add_arbitrary_string_data_from_pose( pose, string_map)
-
-        sfd.write_pose( pose, score_map, name_no_suffix, string_map)
-        if (out_pose != None):
-
-
+        # rescore the designed pose
+        print("rescoring SAP:")
+        name_no_suffix += '_resurf'
+        post_pose = sap_score(new_pose, name_no_suffix, score_map, string_map, 
+                "")
+        sfd.write_pose(post_pose, score_map, name_no_suffix, string_map)
+        if (pre_pose != None):
             # pdb_info = core.pose.PDBInfo(pose)
             # pose.pdb_info(pdb_info)
             if ( silent == "" ):
-                out_pose.dump_pdb(name_no_suffix + ".pdb")
+                post_pose.dump_pdb(name_no_suffix + ".pdb")
             else:
                 struct = sfd_out.create_SilentStructOP()
-                struct.fill_struct(out_pose, name_no_suffix)
+                struct.fill_struct(post_pose, name_no_suffix)
                 sfd_out.add_structure(struct)
 
-
         seconds = int(time.time() - t0)
-
-        print("protocols.jd2.JobDistributor: " + name_no_suffix + " reported success in %i seconds"%seconds)
-
-    # except Exception as e:
-    #     print("Error!!!")
-    #     print(e)
-
-
+        # print("protocols.jd2.JobDistributor: " + name_no_suffix + " reported success in %i seconds"%seconds)
+        print("protocols.jd2.JobDistributor: {0} reported success in {1} \
+                seconds".format(name_no_suffix, seconds))
 
 if ( silent != "" ):
     sfd_out.write_all("out.silent", False)
