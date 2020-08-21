@@ -3,7 +3,8 @@
 #./remove_superfluous_trp.py pdb1.pdb pdb2.pdb pdb3.pdb
 # or
 #./remove_superfluous_trp.py -in:file:silent my.silent
-"""python libraries"""
+# TODO better documentation, delta SAP
+# python libraries
 from __future__ import division
 import argparse
 from collections import defaultdict
@@ -13,7 +14,7 @@ import os
 import subprocess
 import sys
 import time
-"""external libraries"""
+# external libraries
 import numpy as np
 from pyrosetta import *
 from pyrosetta.rosetta import *
@@ -41,27 +42,34 @@ from pyrosetta.rosetta.protocols.protein_interface_design import (
     FavorNativeResidue)
 from pyrosetta.rosetta.protocols.relax import FastRelax
 from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
-"""Bcov libraries"""
+# Bcov libraries
 sys.path.append("/home/bcov/sc/random/npose")
 import voxel_array
 import npose_util
 import npose_util_pyrosetta as nup
+__author__ = "Brian Coventry, Philip Leung"
+__copyright__ = None
+__credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
+__license__ = "MIT"
+__version__ = "0.0.1"
+__maintainer__ = "Philip Leung"
+__email__ = "pleung@cs.washington.edu"
+__status__ = "Beta"
 # TODO remove holes?
 flags = """
 -corrections::beta_nov16
--holes:dalphaball /home/bcov/dev_rosetta/main/source/external/DAlpahBall/DAlphaBall.gcc
 -ignore_unrecognized_res 1
 -in:file:silent_struct_type binary 
--keep_input_scores false"
+-keep_input_scores false
 -mute core.select.residue_selector.SecondaryStructureSelector
 -mute core.select.residue_selector.PrimarySequenceNeighborhoodSelector
 -mute protocols.DsspMover
 """
-init(" ".join(flags.replace("\n\t", " ").split()))
+pyrosetta.init(' '.join(flags.replace('\n\t', ' ').split()))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-in:file:silent", type=str, default="")
-parser.add_argument("pdbs", type=str, nargs="*")
+parser.add_argument("-in:file:silent", type=str, default='')
+parser.add_argument("pdbs", type=str, nargs='*')
 parser.add_argument("-zero_adjust", type=float, default=0)
 parser.add_argument("-worst_n", type=int, default=25)
 
@@ -73,7 +81,7 @@ worst_n = args.worst_n
 
 alpha = "ACDEFGHIKLMNPQRSTVWY"
 
-seq = ""
+seq = ''
 for letter in alpha:
     seq += "AA%sAA"%letter
 
@@ -119,26 +127,26 @@ for i in range(len(alpha)):
 # Development of hydrophobicity parameters to analyze proteins which bear post- or cotranslational modifications
 # then you subtract 0.5 from scaled
 hydrophobicity = {
-    "A": 0.116,
-    "C": 0.18,
-    "D": -0.472,
-    "E": -0.457,
-    "F": 0.5,
-    "G": 0.001,
-    "H": -0.335,
-    "I": 0.443,
-    "K": -0.217,
-    "L": 0.443,
-    "M": 0.238,
-    "N": -0.264,
-    "P": 0.211,
-    "Q": -0.249,
-    "R": -0.5,
-    "S": -0.141,
-    "T": -0.05,
-    "V": 0.325,
-    "W": 0.378,
-    "Y": 0.38,
+    'A': 0.116,
+    'C': 0.18,
+    'D': -0.472,
+    'E': -0.457,
+    'F': 0.5,
+    'G': 0.001,
+    'H': -0.335,
+    'I': 0.443,
+    'K': -0.217,
+    'L': 0.443,
+    'M': 0.238,
+    'N': -0.264,
+    'P': 0.211,
+    'Q': -0.249,
+    'R': -0.5,
+    'S': -0.141,
+    'T': -0.05,
+    'V': 0.325,
+    'W': 0.378,
+    'Y': 0.38,
 }
 
 
@@ -171,7 +179,7 @@ def my_rstrip(string, strip):
     return string
 
 
-def add_to_score_map(og_map, to_add, prefix, suffix=""):
+def add_to_score_map(og_map, to_add, prefix, suffix=''):
     for name, score in list(to_add.items()):    # this iterator is broken. use list()
         og_map[prefix + name + suffix] = score
 
@@ -225,7 +233,7 @@ def score_with_these_filters(pose, filters, out_score_map):
         add_filter_to_results(pose, filtername, out_score_map)
 
 def cmd(command, wait=True):
-    # print ""
+    # print ''
     # print command
     the_command = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     if (not wait):
@@ -293,7 +301,7 @@ def better_dssp2(pose, length=-1):
     the_dssp[-4] = c_consensus
     the_dssp[-5] = c_consensus
 
-    the_dssp = "".join(the_dssp)
+    the_dssp = ''.join(the_dssp)
 
     my_dssp = "x"
 
@@ -785,7 +793,7 @@ def residue_sap_list_maker(pose:Pose) -> list:
 ############### BEGIN MAIN FUNCTION ###########################
 
 
-if silent != "":
+if silent != '':
     sfd_in = SilentFileData(SilentFileOptions())
     sfd_in.read_file(silent)
     pdbs = list(sfd_in.tags())
@@ -799,7 +807,7 @@ for pdb in pdbs:
     print("Attempting pose: " + pdb)
 
     for k in [1]:
-        if ( silent == "" ):
+        if ( silent == '' ):
             pose = pose_from_file(pdb)
         else:
             pose = Pose()
@@ -812,7 +820,7 @@ for pdb in pdbs:
         string_map = std.map_std_string_std_string()
         # get SAP score for the pose
         print("prescoring SAP:")
-        pre_pose = sap_score(pose, name_no_suffix, score_map, string_map, "")
+        pre_pose = sap_score(pose, name_no_suffix, score_map, string_map, '')
         core.io.raw_data.ScoreMap.add_arbitrary_score_data_from_pose(pose,
                 score_map)
         core.io.raw_data.ScoreMap.add_arbitrary_string_data_from_pose(pose,
@@ -822,7 +830,7 @@ for pdb in pdbs:
         sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
                                          reverse=True)
         worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
-        print("worst residues by SAP", ' '.join(worst_resis))
+        print("worst residues by SAP", ' '.join(str(x) for x in worst_resis))
         # redesign a new pose targeting the worst residues
         new_pose = fast_design_with_options(pre_pose, to_design=worst_resis,
                 cutoffs=(20, 40), flexbb=False,
@@ -833,12 +841,12 @@ for pdb in pdbs:
         print("rescoring SAP:")
         name_no_suffix += '_resurf'
         post_pose = sap_score(new_pose, name_no_suffix, score_map, string_map, 
-                "")
+                '')
         sfd.write_pose(post_pose, score_map, name_no_suffix, string_map)
         if (pre_pose != None):
             # pdb_info = core.pose.PDBInfo(pose)
             # pose.pdb_info(pdb_info)
-            if ( silent == "" ):
+            if ( silent == '' ):
                 post_pose.dump_pdb(name_no_suffix + ".pdb")
             else:
                 struct = sfd_out.create_SilentStructOP()
@@ -850,6 +858,6 @@ for pdb in pdbs:
         print("protocols.jd2.JobDistributor: {0} reported success in {1} \
                 seconds".format(name_no_suffix, seconds))
 
-if ( silent != "" ):
+if ( silent != '' ):
     sfd_out.write_all("out.silent", False)
 

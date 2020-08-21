@@ -3,8 +3,17 @@
 #./remove_superfluous_trp.py pdb1.pdb pdb2.pdb pdb3.pdb
 # or
 #./remove_superfluous_trp.py -in:file:silent my.silent
-"""python libraries"""
+# TODO better documentation, delta SAP
+# python libraries
 from __future__ import division
+__author__ = "Brian Coventry, Philip Leung"
+__copyright__ = None
+__credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
+__license__ = "MIT"
+__version__ = "0.0.1"
+__maintainer__ = "Philip Leung"
+__email__ = "pleung@cs.washington.edu"
+__status__ = "Beta"
 import argparse
 from collections import defaultdict
 import itertools
@@ -13,7 +22,7 @@ import os
 import subprocess
 import sys
 import time
-"""external libraries"""
+# external libraries
 import numpy as np
 from pyrosetta import *
 from pyrosetta.rosetta import *
@@ -41,7 +50,7 @@ from pyrosetta.rosetta.protocols.protein_interface_design import (
     FavorNativeResidue)
 from pyrosetta.rosetta.protocols.relax import FastRelax
 from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
-"""Bcov libraries"""
+# Bcov libraries
 sys.path.append("/home/bcov/sc/random/npose")
 import voxel_array
 import npose_util
@@ -49,15 +58,16 @@ import npose_util_pyrosetta as nup
 # TODO remove holes?
 flags = """
 -corrections::beta_nov16
--holes:dalphaball /home/bcov/dev_rosetta/main/source/external/DAlpahBall/DAlphaBall.gcc
+-holes:dalphaball 
+/home/bcov/dev_rosetta/main/source/external/DAlpahBall/DAlphaBall.gcc
 -ignore_unrecognized_res 1
 -in:file:silent_struct_type binary 
--keep_input_scores false"
+-keep_input_scores false
 -mute core.select.residue_selector.SecondaryStructureSelector
 -mute core.select.residue_selector.PrimarySequenceNeighborhoodSelector
 -mute protocols.DsspMover
 """
-init(' '.join(flags.replace("\n\t", ' ').split()))
+pyrosetta.init(' '.join(flags.replace('\n\t', ' ').split()))
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-in:file:silent", type=str, default='')
@@ -822,7 +832,7 @@ for pdb in pdbs:
         sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
                                          reverse=True)
         worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
-        print("worst residues by SAP", ' '.join(worst_resis))
+        print("worst residues by SAP", ' '.join(str(x) for x in worst_resis))
         # redesign a new pose targeting the worst residues
         new_pose = fast_design_with_options(pre_pose, to_design=worst_resis,
                 cutoffs=(20, 40), flexbb=False,
