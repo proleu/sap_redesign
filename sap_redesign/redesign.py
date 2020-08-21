@@ -4,6 +4,11 @@
 # or
 #./remove_superfluous_trp.py -in:file:silent my.silent
 # TODO better documentation, delta SAP
+# TODO more options: 
+# design recursively on small numbers since the offending ones are usually far away from each other
+# i also need to make it dump an individual score file 
+# so that there isn't any scorefile corruption if it is run in batches
+
 # python libraries
 from __future__ import division
 __author__ = "Brian Coventry, Philip Leung"
@@ -13,7 +18,7 @@ __license__ = "MIT"
 __version__ = "0.0.1"
 __maintainer__ = "Philip Leung"
 __email__ = "pleung@cs.washington.edu"
-__status__ = "Beta"
+__status__ = "Prototype"
 import argparse
 from collections import defaultdict
 import itertools

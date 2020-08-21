@@ -6,6 +6,14 @@
 # TODO better documentation, delta SAP
 # python libraries
 from __future__ import division
+__author__ = "Brian Coventry, Philip Leung"
+__copyright__ = None
+__credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
+__license__ = "MIT"
+__version__ = "0.0.1"
+__maintainer__ = "Philip Leung"
+__email__ = "pleung@cs.washington.edu"
+__status__ = "Prototype"
 import argparse
 from collections import defaultdict
 import itertools
@@ -47,17 +55,11 @@ sys.path.append("/home/bcov/sc/random/npose")
 import voxel_array
 import npose_util
 import npose_util_pyrosetta as nup
-__author__ = "Brian Coventry, Philip Leung"
-__copyright__ = None
-__credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
-__license__ = "MIT"
-__version__ = "0.0.1"
-__maintainer__ = "Philip Leung"
-__email__ = "pleung@cs.washington.edu"
-__status__ = "Beta"
 # TODO remove holes?
 flags = """
 -corrections::beta_nov16
+-holes:dalphaball 
+/home/bcov/dev_rosetta/main/source/external/DAlpahBall/DAlphaBall.gcc
 -ignore_unrecognized_res 1
 -in:file:silent_struct_type binary 
 -keep_input_scores false
