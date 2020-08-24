@@ -5,7 +5,7 @@
 #./remove_superfluous_trp.py -in:file:silent my.silent
 # TODO fix max SASA calculation to read in a file, instead of calculating it everytime this damn script is called
 # TODO remove all unused utility functions
-# TODO better documentation, delta SAP
+# TODO better documentation, delta SAP?
 # TODO more options: 
 # design recursively on small numbers since the offending ones are usually far away from each other
 # i also need to make it dump an individual score file 
@@ -82,7 +82,9 @@ parser.add_argument("pdbs", type=str, nargs='*')
 parser.add_argument("-zero_adjust", type=float, default=0)
 parser.add_argument("-worst_n", type=int, default=25)
 parser.add_argument("-radius", type=int, default=5)
-# TODO radius size, lock_resis/design_resis, flexbb, sc_neighbors, cutoffs, up_ele, relax_script
+parser.add_argument("-flexbb", type=bool, default=True)
+parser.add_argument("-use_sc_neighbors", type=bool, default=False)
+# TODO lock_resis/design_resis, sc_neighbors, cutoffs, up_ele, relax_script
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -91,6 +93,8 @@ silent = args.__getattribute__("in:file:silent")
 worst_n = args.worst_n
 zero_adjust = args.zero_adjust
 radius = args.radius
+flexbb = args.flexbb
+use_sc_neighbors = args.use_sc_neighbors
 
 # TODO put this info into a file and just load the file, it should be faster
 alpha = "ACDEFGHIKLMNPQRSTVWY"
@@ -588,19 +592,20 @@ for pdb in pdbs:
         residue_sap_list = residue_sap_list_maker(pre_pose)
         sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
                                          reverse=True)
+        # TODO make this check to see if each worst resi is allowed to be designed
         worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
         print("worst residues by SAP", ' '.join(str(x) for x in worst_resis))
         # redesign a new pose targeting the worst residues
         new_pose = fast_design_with_options(pre_pose, to_design=worst_resis,
-                cutoffs=(20, 40), flexbb=False,
+                cutoffs=(20, 40), flexbb=flexbb,
                 relax_script="MonomerDesign2019", restraint=0, use_dssp=True,
-                use_sc_neighbors=False)
+                use_sc_neighbors=use_sc_neighbors)
 
         # rescore the designed pose
         print("rescoring SAP:")
         name_no_suffix += '_resurf'
-        post_pose = sap_score(new_pose, name_no_suffix, score_map, string_map, 
-                '')
+        post_pose = sap_score(new_pose, radius, name_no_suffix, score_map,
+                string_map, '')
         sfd.write_pose(post_pose, score_map, name_no_suffix, string_map)
         if (pre_pose != None):
             # pdb_info = core.pose.PDBInfo(pose)
