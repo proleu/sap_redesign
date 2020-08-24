@@ -111,12 +111,6 @@ def get_per_atom_sasa(pose, probe_size=1.1):
     # print(surf_vol.surf(2, 1))  # this is per atom sasa (residue 2, atom 1)
     return surf_vol
 # TODO i'm pretty sure this function isn't used anymore
-def get_per_atom_sasa2(pose, probe_size=1.1):
-    sasas = core.id.AtomID_Map_double_t()
-    rsd_sasa = utility.vector1_double()
-    core.scoring.calc_per_atom_sasa(pose, sasas, rsd_sasa, probe_size, False)
-    return sasas
-
 
 surf_vol = get_per_atom_sasa(sasa_pose)
 
@@ -162,7 +156,6 @@ hydrophobicity = {
 
 scorefxn = core.scoring.ScoreFunctionFactory.create_score_function("beta_nov16")
 
-
 def fix_scorefxn(sfxn, allow_double_bb=False):
     opts = sfxn.energy_method_options()
     opts.hbond_options().decompose_bb_hb_into_pair_energies(True)
@@ -182,187 +175,6 @@ def my_rstrip(string, strip):
 def add_to_score_map(og_map, to_add, prefix, suffix=''):
     for name, score in list(to_add.items()):    # this iterator is broken. use list()
         og_map[prefix + name + suffix] = score
-
-# TODO I'm pretty sure this isn't used
-def move_chainA_far_away(pose):
-    pose = pose.clone()
-    sel = core.select.residue_selector.ChainSelector("A")
-    subset = sel.apply(pose)
-
-    x_unit = numeric.xyzVector_double_t(1, 0, 0)
-    far_away = numeric.xyzVector_double_t(100, 0, 0)
-
-    protocols.toolbox.pose_manipulation.rigid_body_move(x_unit, 0, far_away, pose, subset)
-
-    return pose
-
-
-def which_chain(pose, resi):
-    for i in range(1, pose.num_chains()+1):
-        if ( pose.conformation().chain_begin(i) <= resi and pose.conformation().chain_end(i) >= resi):
-            return i
-    assert(False)
-
-def get_monomer_score(pose, scorefxn):
-    pose = pose.split_by_chain()[1]
-    return scorefxn(pose)
-
-
-def get_filter_by_name(filtername):
-    the_filter = objs.get_filter(filtername)
-
-    # Get rid of stochastic filter
-    if ( isinstance(the_filter, pyrosetta.rosetta.protocols.filters.StochasticFilter) ):
-        the_filter = the_filter.subfilter()
-
-    return the_filter
-
-def add_filter_to_results(pose, filtername, out_score_map):
-    filter = get_filter_by_name(filtername)
-    print("protocols.rosetta_scripts.ParsedProtocol.REPORT: ============Begin report for " + filtername + "=======================")
-    if (isinstance(filter, protocols.simple_filters.ShapeComplementarityFilter)):
-        value = filter.compute(pose)
-        out_score_map[filtername] = value.sc
-        out_score_map[filtername+"_median_dist"] = value.distance
-    else:
-        value = filter.report_sm(pose)
-        out_score_map[filtername] = value
-    print("============End report for " + filtername + "=======================")
-
-def score_with_these_filters(pose, filters, out_score_map):
-    for filtername in filters:
-        add_filter_to_results(pose, filtername, out_score_map)
-
-def cmd(command, wait=True):
-    # print ''
-    # print command
-    the_command = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, universal_newlines=True)
-    if (not wait):
-        return
-    the_stuff = the_command.communicate()
-    return str(the_stuff[0]) + str(the_stuff[1])
-
-def atid(resnum, atno):
-    return core.id.AtomID( atno, resnum )
-
-abego_man = core.sequence.ABEGOManager()
-def get_abego(pose, seqpos):
-    abego = abego_man.index2symbol(abego_man.torsion2index_level1(
-        pose.phi(seqpos), pose.psi(seqpos), pose.omega(seqpos)))
-    return abego
-
-def dump_region(pose, start, end, name):
-    residues = utility.vector1_unsigned_long()
-    for i in range(start, end ):
-        residues.append(i)
-
-    to_dump = core.pose.Pose()
-    core.pose.pdbslice(to_dump, pose, residues)
-    pdbinfo = core.pose.PDBInfo( to_dump )
-    to_dump.pdb_info(pdbinfo)
-    to_dump.dump_pdb(name)
-
-
-
-def get_consensus(letters):
-    counts = defaultdict(lambda : 0, {})
-    for letter in letters:
-        counts[letter] += 1
-
-    maxx_letter = 0
-    maxx = 0
-    for key in counts:
-        if ( counts[key] > maxx ):
-            maxx = counts[key]
-            maxx_letter = key
-    return maxx_letter
-
-# this is 1 indexed with the start and end with loops converted to nearby dssp
-# and HHHHHH turns identified
-def better_dssp2(pose, length=-1):
-    if ( length < 0 ):
-        length = pose.size()
-
-    dssp = core.scoring.dssp.Dssp(pose)
-    dssp.dssp_reduced()
-    the_dssp = "x" + dssp.get_dssp_secstruct()
-    the_dssp = list(the_dssp)
-
-    n_consensus = get_consensus(the_dssp[3:6])
-
-    the_dssp[1] = n_consensus
-    the_dssp[2] = n_consensus
-    the_dssp[3] = n_consensus
-    the_dssp[4] = n_consensus
-    the_dssp[5] = n_consensus
-
-    c_consensus = get_consensus(the_dssp[-5:-2])
-
-    the_dssp[-1] = c_consensus
-    the_dssp[-2] = c_consensus
-    the_dssp[-3] = c_consensus
-    the_dssp[-4] = c_consensus
-    the_dssp[-5] = c_consensus
-
-    the_dssp = ''.join(the_dssp)
-
-    my_dssp = "x"
-
-    for seqpos in range(1, length+1):
-        abego = get_abego(pose, seqpos)
-        this_dssp = the_dssp[seqpos]
-        if ( the_dssp[seqpos] == "H" and abego != "A" ):
-            # print("!!!!!!!!!! Dssp - abego mismatch: %i %s %s !!!!!!!!!!!!!!!"%(seqpos, the_dssp[seqpos], abego))
-            # This is the Helix-turn-helix HHHH case. See the test_scaffs folder
-            if ( abego == "B" or abego == "E" and seqpos > 5 and seqpos < len(the_dssp)-5 ):
-                this_dssp = "L"
-        my_dssp += this_dssp
-    return my_dssp
-
-# assumes dssp starts with X and removes it
-def get_ss_elements2(dssp):
-    assert(dssp[0] == "x")
-    ss_elements = []
-
-    offset = 0
-    ilabel = -1
-    for label, group in itertools.groupby(dssp):
-        ilabel += 1
-        this_len = sum(1 for _ in group)
-        next_offset = offset + this_len
-
-        ss_elements.append( (label, offset, next_offset-1))
-
-        offset = next_offset
-    return ss_elements[1:]
-
-
-def delete_residues_smart(pose, start, end):
-
-    ft = pose.fold_tree()
-    if ( start == 1 ):
-        ft.reorder(pose.size())
-    else:
-        ft.reorder(1)
-    pose.fold_tree(ft)
-
-    pose.delete_residue_range_slow(start, end)
-    pose.conformation().detect_disulfides()
-
-def ss_elem_subset(elem, pose):
-    subset = utility.vector1_bool(pose.size())
-
-    label, start, end = elem
-
-    for i in range(start, end+1):
-        subset[i] = True
-
-    return subset
-
-
-the_locals = None
-
 
 # Developability index: a rapid in silico tool for the screening of antibody aggregation propensity.
 def sap_score(pose, name_no_suffix, out_score_map, out_string_map, suffix):
@@ -411,20 +223,17 @@ def sap_score(pose, name_no_suffix, out_score_map, out_string_map, suffix):
     for idx, _ in enumerate(clashgrid.arr.flat):
         clashgrid.arr.flat[idx] = []
 
-
     for ixyz, xyz in enumerate(xyzs):
         indices = clashgrid.indices_within_x_of(R+resl, xyz)
         for index in indices:
             # print(clashgrid.arr[tuple(index)])
             clashgrid.arr[tuple(index)].append(ixyz)
 
-
     atom_grid_indices = clashgrid.floats_to_indices(xyzs)
 
     sap_scores = []
 
     pdb_info = pose.pdb_info()
-
 
     for iatom in range(len(xyzs)):
         xyz = xyzs[iatom]
@@ -858,7 +667,6 @@ for pdb in pdbs:
                 sfd_out.add_structure(struct)
 
         seconds = int(time.time() - t0)
-        # print("protocols.jd2.JobDistributor: " + name_no_suffix + " reported success in %i seconds"%seconds)
         print("protocols.jd2.JobDistributor: {0} reported success in {1} \
                 seconds".format(name_no_suffix, seconds))
 
