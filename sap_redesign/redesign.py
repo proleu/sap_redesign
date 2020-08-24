@@ -3,6 +3,8 @@
 #./remove_superfluous_trp.py pdb1.pdb pdb2.pdb pdb3.pdb
 # or
 #./remove_superfluous_trp.py -in:file:silent my.silent
+# TODO fix max SASA calculation to read in a file, instead of calculating it everytime this damn script is called
+# TODO remove all unused utility functions
 # TODO better documentation, delta SAP
 # TODO more options: 
 # design recursively on small numbers since the offending ones are usually far away from each other
@@ -15,7 +17,7 @@ __author__ = "Brian Coventry, Philip Leung"
 __copyright__ = None
 __credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
 __license__ = "MIT"
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 __maintainer__ = "Philip Leung"
 __email__ = "pleung@cs.washington.edu"
 __status__ = "Prototype"
@@ -73,18 +75,20 @@ flags = """
 -mute protocols.DsspMover
 """
 pyrosetta.init(' '.join(flags.replace('\n\t', ' ').split()))
-
+# TODO add more defense here
 parser = argparse.ArgumentParser()
 parser.add_argument("-in:file:silent", type=str, default='')
 parser.add_argument("pdbs", type=str, nargs='*')
 parser.add_argument("-zero_adjust", type=float, default=0)
 parser.add_argument("-worst_n", type=int, default=25)
+# TODO probe size, lock_resis/design_resis, flexbb, sc_neighbors, cutoffs, up_ele
 
 args = parser.parse_args(sys.argv[1:])
 
 pdbs = args.pdbs
 silent = args.__getattribute__("in:file:silent")
 worst_n = args.worst_n
+zero_adjust = args.zero_adjust
 
 alpha = "ACDEFGHIKLMNPQRSTVWY"
 
@@ -106,7 +110,7 @@ def get_per_atom_sasa(pose, probe_size=1.1):
     # print(surf_vol.tot_surf)
     # print(surf_vol.surf(2, 1))  # this is per atom sasa (residue 2, atom 1)
     return surf_vol
-
+# TODO i'm pretty sure this function isn't used anymore
 def get_per_atom_sasa2(pose, probe_size=1.1):
     sasas = core.id.AtomID_Map_double_t()
     rsd_sasa = utility.vector1_double()
@@ -156,15 +160,6 @@ hydrophobicity = {
     'Y': 0.38,
 }
 
-
-
-# script_dir = os.path.dirname(os.path.realpath(__file__))
-# xml = script_dir + "/py_xml/remove_superfluous_nonpolar.xml"
-
-
-# objs = protocols.rosetta_scripts.XmlObjects.create_from_file(xml)
-
-
 scorefxn = core.scoring.ScoreFunctionFactory.create_score_function("beta_nov16")
 
 
@@ -179,17 +174,16 @@ def fix_scorefxn(sfxn, allow_double_bb=False):
 
 fix_scorefxn(scorefxn)
 
-
 def my_rstrip(string, strip):
     if (string.endswith(strip)):
         return string[:-len(strip)]
     return string
 
-
 def add_to_score_map(og_map, to_add, prefix, suffix=''):
     for name, score in list(to_add.items()):    # this iterator is broken. use list()
         og_map[prefix + name + suffix] = score
 
+# TODO I'm pretty sure this isn't used
 def move_chainA_far_away(pose):
     pose = pose.clone()
     sel = core.select.residue_selector.ChainSelector("A")
@@ -242,7 +236,8 @@ def score_with_these_filters(pose, filters, out_score_map):
 def cmd(command, wait=True):
     # print ''
     # print command
-    the_command = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    the_command = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, universal_newlines=True)
     if (not wait):
         return
     the_stuff = the_command.communicate()
@@ -253,7 +248,9 @@ def atid(resnum, atno):
 
 abego_man = core.sequence.ABEGOManager()
 def get_abego(pose, seqpos):
-    return abego_man.index2symbol(abego_man.torsion2index_level1( pose.phi(seqpos), pose.psi(seqpos), pose.omega(seqpos)))
+    abego = abego_man.index2symbol(abego_man.torsion2index_level1(
+        pose.phi(seqpos), pose.psi(seqpos), pose.omega(seqpos)))
+    return abego
 
 def dump_region(pose, start, end, name):
     residues = utility.vector1_unsigned_long()
@@ -380,7 +377,7 @@ def sap_score(pose, name_no_suffix, out_score_map, out_string_map, suffix):
     for resnum in range(1, pose.size()+1):
         letter = pose.residue(resnum).name1()
         res_max_sasa.append(max_sasa[letter])
-        res_hydrophobicity.append(hydrophobicity[letter] + args.zero_adjust)
+        res_hydrophobicity.append(hydrophobicity[letter] + zero_adjust)
     # make the things required to find 5A neighbors 
     idx_to_atom = []
     xyzs = []
