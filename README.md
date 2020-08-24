@@ -1,6 +1,7 @@
 # sap_redesign
 
-A tool for resurfacing proteins to increase their solubility
+A tool for resurfacing proteins to increase their solubility.
+Requires numpy and pyrosetta to be installed.
 
 ## Installation
 
@@ -8,7 +9,6 @@ TODO
 
 ## Usage
 
-Requires numpy and pyrosetta.
 Redesign a folder full of pdbs, picking the worst 20 residues by SAP score:
 ```bash
 python redesign.py *.pdb --worst_n 20
