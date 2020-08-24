@@ -90,8 +90,8 @@ silent = args.__getattribute__("in:file:silent")
 worst_n = args.worst_n
 zero_adjust = args.zero_adjust
 
+# TODO put this info into a file and just load the file, it should be faster
 alpha = "ACDEFGHIKLMNPQRSTVWY"
-
 seq = ''
 for letter in alpha:
     seq += "AA%sAA"%letter
@@ -110,7 +110,6 @@ def get_per_atom_sasa(pose, probe_size=1.1):
     # print(surf_vol.tot_surf)
     # print(surf_vol.surf(2, 1))  # this is per atom sasa (residue 2, atom 1)
     return surf_vol
-# TODO i'm pretty sure this function isn't used anymore
 
 surf_vol = get_per_atom_sasa(sasa_pose)
 
@@ -153,7 +152,7 @@ hydrophobicity = {
     'W': 0.378,
     'Y': 0.38,
 }
-
+# TODO remove this?
 scorefxn = core.scoring.ScoreFunctionFactory.create_score_function("beta_nov16")
 
 def fix_scorefxn(sfxn, allow_double_bb=False):
@@ -171,10 +170,6 @@ def my_rstrip(string, strip):
     if (string.endswith(strip)):
         return string[:-len(strip)]
     return string
-
-def add_to_score_map(og_map, to_add, prefix, suffix=''):
-    for name, score in list(to_add.items()):    # this iterator is broken. use list()
-        og_map[prefix + name + suffix] = score
 
 # Developability index: a rapid in silico tool for the screening of antibody aggregation propensity.
 def sap_score(pose, name_no_suffix, out_score_map, out_string_map, suffix):
@@ -202,13 +197,7 @@ def sap_score(pose, name_no_suffix, out_score_map, out_string_map, suffix):
             xyzs.append(nup.from_vector(res.xyz(at)))
             idx_to_atom.append([resnum, at])
             atom_sasa.append(surf_vol.surf(resnum, at))
-            # if ( atom_sasa[-1] > 1000 ):
-            #     print("AARF", atom_sasa[-1], resnum, at, res.natoms(), len(atom_sasa), surf_vol.vol(resnum, at))
-            # print("AAAA", atom_sasa[-1], resnum, at, res.natoms(), len(atom_sasa), surf_vol.vol(resnum, at))
-
-    # print("TOTAL: ", surf_vol.tot_surf)
-
-    # return None
+    
     atom_sasa = np.array(atom_sasa)
     idx_to_atom = np.array(idx_to_atom)
     xyzs = np.array(xyzs)
@@ -223,20 +212,16 @@ def sap_score(pose, name_no_suffix, out_score_map, out_string_map, suffix):
     for idx, _ in enumerate(clashgrid.arr.flat):
         clashgrid.arr.flat[idx] = []
 
-
     for ixyz, xyz in enumerate(xyzs):
         indices = clashgrid.indices_within_x_of(R+resl, xyz)
         for index in indices:
-            # print(clashgrid.arr[tuple(index)])
             clashgrid.arr[tuple(index)].append(ixyz)
-
 
     atom_grid_indices = clashgrid.floats_to_indices(xyzs)
 
     sap_scores = []
 
     pdb_info = pose.pdb_info()
-
 
     for iatom in range(len(xyzs)):
         xyz = xyzs[iatom]
@@ -259,7 +244,9 @@ def sap_score(pose, name_no_suffix, out_score_map, out_string_map, suffix):
 
             res_score = res_sasa / res_max_sasa[ot_resnum] * res_hydrophobicity[ot_resnum]
             if ( res_score > 1000 ):
-                print(ot_resnum, pose.residue(ot_resnum).name1(), res_sasa, res_max_sasa[ot_resnum], res_hydrophobicity[ot_resnum])
+                print(ot_resnum, pose.residue(ot_resnum).name1(),
+                        res_sasa, res_max_sasa[ot_resnum], 
+                        res_hydrophobicity[ot_resnum])
 
             atom_score += res_score
 
@@ -458,8 +445,6 @@ def favor_native_residue_maker(sfxn: ScoreFunction, restraint: float
     sfxn.set_weight(ScoreType.res_type_constraint, 1.0)
     xml_string = """
     <MOVERS>
-        <FavorSequenceProfile name="favournative" weight="-100" use_current="true" matrix="IDENTITY"/>
-
         <FavorNativeResidue name="favor_native_residue" bonus="{}"/>
     </MOVERS>
     """.format(restraint)
@@ -615,8 +600,7 @@ if silent != '':
     pdbs = list(sfd_in.tags())
     sfd_out = SilentFileData("out.silent", False, False, "binary",
             SilentFileOptions())
-
-
+# TODO is num used?
 num = -1
 for pdb in pdbs:
     t0 = time.time()
