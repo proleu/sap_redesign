@@ -17,7 +17,7 @@ __author__ = "Brian Coventry, Philip Leung"
 __copyright__ = None
 __credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __maintainer__ = "Philip Leung"
 __email__ = "pleung@cs.washington.edu"
 __status__ = "Prototype"
@@ -81,7 +81,8 @@ parser.add_argument("-in:file:silent", type=str, default='')
 parser.add_argument("pdbs", type=str, nargs='*')
 parser.add_argument("-zero_adjust", type=float, default=0)
 parser.add_argument("-worst_n", type=int, default=25)
-# TODO probe size, lock_resis/design_resis, flexbb, sc_neighbors, cutoffs, up_ele
+parser.add_argument("-radius", type=int, default=5)
+# TODO radius size, lock_resis/design_resis, flexbb, sc_neighbors, cutoffs, up_ele, relax_script
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -89,6 +90,7 @@ pdbs = args.pdbs
 silent = args.__getattribute__("in:file:silent")
 worst_n = args.worst_n
 zero_adjust = args.zero_adjust
+radius = args.radius
 
 # TODO put this info into a file and just load the file, it should be faster
 alpha = "ACDEFGHIKLMNPQRSTVWY"
@@ -172,9 +174,10 @@ def my_rstrip(string, strip):
     return string
 
 # Developability index: a rapid in silico tool for the screening of antibody aggregation propensity.
-def sap_score(pose, name_no_suffix, out_score_map, out_string_map, suffix):
+def sap_score(pose, radius, name_no_suffix, out_score_map, out_string_map,
+        suffix):
     # R from the paper
-    R = 5
+    R = radius
     pose = pose.split_by_chain()[1]
     surf_vol = get_per_atom_sasa(pose)
     # get the per res base stats
@@ -481,53 +484,8 @@ def relax_script_maker(relax_script:str
         for line in lines:
             script.append(' '.join(line.split()))
     return script
+
 # TODO documentation
-def fast_relax_with_options(pose: Pose, repack_focus=[], flexbb=True,
-                            relax_script="MonomerRelax2019") -> Pose:
-    # sfxn calculations can be sped up by const_bb=True if not using PRO
-    sfxn_hard = sfxn_hard_maker(const_bb=True)
-    # setup task operations
-    task_factory = pyrosetta.rosetta.core.pack.task.TaskFactory()
-    true_sel = residue_selector.TrueResidueSelector()
-    if len(repack_focus) == 0:
-        focus_resis = list(get_residues_from_subset(true_sel.apply(pose)))
-    else:
-        focus_resis = repack_focus.copy()
-    focus = ResidueIndexSelector()
-    focus.set_index(','.join([str(x) for x in focus_resis]))
-    packable = NeighborhoodResidueSelector()
-    packable.set_focus_selector(focus)
-    not_packable = NotResidueSelector()
-    not_packable.set_residue_selector(packable)
-    no_design = operation.RestrictToRepackingRLT()
-    no_repack = operation.PreventRepackingRLT()
-    pack = operation.OperateOnResidueSubset(no_design, true_sel)
-    lock = operation.OperateOnResidueSubset(no_repack, not_packable)
-    ic = operation.IncludeCurrent()
-    arochi = LimitAromaChi2Operation()
-    arochi.include_trp(True)
-    ex1_ex2 = operation.ExtraRotamersGeneric()
-    ex1_ex2.ex1(True), ex1_ex2.ex2(True)
-    prune = PruneBuriedUnsatsOperation()
-    for op in [pack, lock, ic, arochi, ex1_ex2, prune]:
-        task_factory.push_back(op)
-    # setup movemap
-    mm = pyrosetta.rosetta.core.kinematics.MoveMap()
-    mm.set_bb(flexbb), mm.set_chi(True), mm.set_jump(False)
-    # setup fast relax with sfxn_hard and relax_script
-    fast_relax = FastRelax(scorefxn_in=sfxn_hard, standard_repeats=2,
-                           script_file=relax_script)
-    fast_relax.cartesian(False)
-    fast_relax.set_task_factory(task_factory)
-    fast_relax.set_movemap(mm)
-    fast_relax.constrain_relax_to_start_coords(True)
-    fast_relax.minimize_bond_angles(False)
-    fast_relax.minimize_bond_lengths(False)
-    fast_relax.min_type("lbfgs_armijo_nonmonotone")
-    fast_relax.ramp_down_constraints(False)
-    fast_relax.apply(pose)
-    return pose
-# TODO documentation, type check for pose
 def fast_design_with_options(pose:Pose, to_design=[], cutoffs=(20,40), 
         flexbb=True, relax_script="MonomerDesign2019", restraint=0,
         use_dssp=True, use_sc_neighbors=False) -> Pose:
@@ -590,7 +548,7 @@ def residue_sap_list_maker(pose:Pose) -> list:
         
     return residue_sap_list
 
-
+# TODO implement actual main?
 ############### BEGIN MAIN FUNCTION ###########################
 
 
@@ -620,7 +578,8 @@ for pdb in pdbs:
         string_map = std.map_std_string_std_string()
         # get SAP score for the pose
         print("prescoring SAP:")
-        pre_pose = sap_score(pose, name_no_suffix, score_map, string_map, '')
+        pre_pose = sap_score(pose, radius, name_no_suffix, score_map,
+                string_map, '')
         core.io.raw_data.ScoreMap.add_arbitrary_score_data_from_pose(pose,
                 score_map)
         core.io.raw_data.ScoreMap.add_arbitrary_string_data_from_pose(pose,
