@@ -17,7 +17,7 @@ __author__ = "Brian Coventry, Philip Leung"
 __copyright__ = None
 __credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
 __license__ = "MIT"
-__version__ = "0.2.0"
+__version__ = "0.4.0"
 __maintainer__ = "Philip Leung"
 __email__ = "pleung@cs.washington.edu"
 __status__ = "Prototype"
@@ -79,13 +79,17 @@ pyrosetta.init(' '.join(flags.replace('\n\t', ' ').split()))
 # TODO add more defense here
 parser = argparse.ArgumentParser()
 parser.add_argument("-in:file:silent", type=str, default='')
-parser.add_argument("pdbs", type=str, nargs='*')
+parser.add_argument("--pdbs", type=str, nargs='*')
 parser.add_argument("-zero_adjust", type=float, default=0)
 parser.add_argument("-worst_n", type=int, default=25)
 parser.add_argument("-radius", type=int, default=5)
-parser.add_argument("-flexbb", type=bool, default=True)
+parser.add_argument("-flexbb", type=bool, default=False)
 parser.add_argument("-use_sc_neighbors", type=bool, default=False)
 parser.add_argument("-lock_resis", type=int, nargs='*', default=[])
+parser.add_argument("-cutoffs", type=float, nargs='*', default=[20,40])
+parser.add_argument("-relax_script", type=str, default='MonomerDesign2019')
+parser.add_argument("-up_ele", type=bool, default=False)
+
 # TODO sc_neighbors, cutoffs, up_ele, relax_script
 
 args = parser.parse_args(sys.argv[1:])
@@ -98,6 +102,9 @@ radius = args.radius
 flexbb = args.flexbb
 use_sc_neighbors = args.use_sc_neighbors
 lock_resis = args.lock_resis
+cutoffs = tuple(args.cutoffs)
+relax_script = args.relax_script
+up_ele = args.up_ele
 
 # TODO put this info into a file and just load the file, it should be faster
 alpha = "ACDEFGHIKLMNPQRSTVWY"
@@ -270,7 +277,7 @@ def sap_score(pose, radius, name_no_suffix, out_score_map, out_string_map,
     out_score_map['sap_score'] = sap_score
     return pose
 
-def sfxn_hard_maker(const_bb=True) -> ScoreFunction:
+def sfxn_hard_maker(const_bb=True, up_ele=False) -> ScoreFunction:
     """Sets up Bcov's reweighted score function that penalizes buried
     unsatisfied polars more highly so that Rosetta doesn't make as many
     mistakes. Also unsets lk_ball because lk_ball is slow. 
@@ -278,6 +285,8 @@ def sfxn_hard_maker(const_bb=True) -> ScoreFunction:
     Args:
         const_bb (bool): Set this to False if you don't know where to expect
         PRO. Sets approximate_buried_unsat_penalty_assume_const_backbone.
+        up_ele (bool): Increase the bonus for electrostatics, good for making
+        Rosetta design salt bridges and hydrogen bonds.
 
     Returns:
         sfxn_hard (ScoreFunction): The modified score function.
@@ -291,6 +300,9 @@ def sfxn_hard_maker(const_bb=True) -> ScoreFunction:
         are to set beta16_nostab.wts as the weights. Hopefully beta_nov20 
         will be much better. For sequence conservation, currently constraints
         (res_type_constraint) is set externally and this seems to work fine.
+        as of 08262020 I am not sure if up_ele is considered best practices, 
+        but since this implementation is primarily intended for resurfacing I
+        think it should be okay to leave in for now.
     """
     sfxn_hard = pyrosetta.create_score_function("beta_nov16.wts")
     sfxn_hard.set_weight(ScoreType.aa_composition, 1.0)
@@ -302,6 +314,11 @@ def sfxn_hard_maker(const_bb=True) -> ScoreFunction:
         emo.approximate_buried_unsat_penalty_assume_const_backbone(1)
     else:
         emo.approximate_buried_unsat_penalty_assume_const_backbone(0)
+    if up_ele:
+        sfxn_hard.set_weight(ScoreType.fa_elec, 1.4)
+        sfxn_hard.set_weight(ScoreType.hbond_sc, 2.0)
+    else:
+        pass
     sfxn_hard.set_energy_method_options(emo)
     sfxn_hard.set_weight(ScoreType.lk_ball, 0)
     sfxn_hard.set_weight(ScoreType.lk_ball_iso, 0)
@@ -495,9 +512,9 @@ def relax_script_maker(relax_script:str
 # TODO documentation
 def fast_design_with_options(pose:Pose, to_design=[], cutoffs=(20,40), 
         flexbb=True, relax_script="MonomerDesign2019", restraint=0,
-        use_dssp=True, use_sc_neighbors=False) -> Pose:
+        up_ele=False, use_dssp=True, use_sc_neighbors=False) -> Pose:
     """"""
-    sfxn_hard = sfxn_hard_maker(const_bb=False)
+    sfxn_hard = sfxn_hard_maker(up_ele=up_ele)
     # determine which residues are designable
     true_sel = residue_selector.TrueResidueSelector()
     if len(to_design) == 0:
@@ -613,10 +630,9 @@ for pdb in pdbs:
                 ' '.join(str(x) for x in worst_resis))
         # redesign a new pose targeting the worst residues
         new_pose = fast_design_with_options(pre_pose, to_design=worst_resis,
-                cutoffs=(20, 40), flexbb=flexbb,
-                relax_script="MonomerDesign2019", restraint=0, use_dssp=True,
+                cutoffs=cutoffs, flexbb=flexbb, relax_script=relax_script,
+                restraint=0, up_ele=up_ele, use_dssp=True,
                 use_sc_neighbors=use_sc_neighbors)
-
         # rescore the designed pose
         print("rescoring SAP:")
         name_no_suffix += '_resurf'
@@ -624,8 +640,6 @@ for pdb in pdbs:
                 string_map, '')
         sfd.write_pose(post_pose, score_map, name_no_suffix, string_map)
         if (pre_pose != None):
-            # pdb_info = core.pose.PDBInfo(pose)
-            # pose.pdb_info(pdb_info)
             if ( silent == '' ):
                 post_pose.dump_pdb(name_no_suffix + ".pdb")
             else:
