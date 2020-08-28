@@ -5,6 +5,7 @@
 #./remove_superfluous_trp.py -in:file:silent my.silent
 # TODO fix max SASA calculation to read in a file, instead of calculating it everytime this damn script is called
 # TODO remove all unused utility functions
+# TODO figure out why voxel_array sometimes crashes?
 # TODO better documentation, delta SAP? Delta SAP is somewhat nontrivial as it requires you to capture stdout while calling a function.
 # TODO more options: 
 # design recursively on small numbers since the offending ones are usually far away from each other
@@ -58,8 +59,8 @@ from pyrosetta.rosetta.protocols.protein_interface_design import (
 from pyrosetta.rosetta.protocols.relax import FastRelax
 from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
 # Bcov libraries
-# TODO remove this dependency?
-sys.path.append("/home/bcov/sc/random/npose")
+# TODO remove this dependency if possible?
+sys.path.append("/mnt//home/bcov/sc/random/npose")
 import voxel_array
 import npose_util
 import npose_util_pyrosetta as nup
@@ -83,14 +84,15 @@ parser.add_argument("--pdbs", type=str, nargs='*')
 parser.add_argument("-zero_adjust", type=float, default=0)
 parser.add_argument("-worst_n", type=int, default=25)
 parser.add_argument("-radius", type=int, default=5)
-parser.add_argument("-flexbb", type=bool, default=False)
-parser.add_argument("-use_sc_neighbors", type=bool, default=False)
+parser.add_argument("-flexbb", dest='flexbb', action='store_true')
+parser.add_argument("-use_sc_neighbors", dest='use_sc_neighbors',
+        action='store_true')
 parser.add_argument("-lock_resis", type=int, nargs='*', default=[])
 parser.add_argument("-cutoffs", type=float, nargs='*', default=[20,40])
 parser.add_argument("-relax_script", type=str, default='MonomerDesign2019')
-parser.add_argument("-up_ele", type=bool, default=False)
-
-# TODO sc_neighbors, cutoffs, up_ele, relax_script
+parser.add_argument("-up_ele", dest='up_ele', action='store_true')
+parser.add_argument("-no_prescore", dest='prescore', action='store_false')
+parser.add_argument("-no_rescore", dest='rescore', action='store_false')
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -105,7 +107,10 @@ lock_resis = args.lock_resis
 cutoffs = tuple(args.cutoffs)
 relax_script = args.relax_script
 up_ele = args.up_ele
-
+prescore = args.prescore
+rescore = args.rescore
+# TODO
+print(args)
 # TODO put this info into a file and just load the file, it should be faster
 alpha = "ACDEFGHIKLMNPQRSTVWY"
 seq = ''
@@ -600,14 +605,18 @@ for pdb in pdbs:
         sfd = core.io.raw_data.ScoreFileData("score.sc")
         score_map = std.map_std_string_double()
         string_map = std.map_std_string_std_string()
-        # get SAP score for the pose
-        print("prescoring SAP:")
-        pre_pose = sap_score(pose, radius, name_no_suffix, score_map,
-                string_map, '')
-        core.io.raw_data.ScoreMap.add_arbitrary_score_data_from_pose(pose,
-                score_map)
-        core.io.raw_data.ScoreMap.add_arbitrary_string_data_from_pose(pose,
-                string_map)
+        if prescore:
+            # get SAP score for the pose
+            print("prescoring SAP:")
+            pre_pose = sap_score(pose, radius, name_no_suffix, score_map,
+                    string_map, '')
+            core.io.raw_data.ScoreMap.add_arbitrary_score_data_from_pose(pose,
+                    score_map)
+            core.io.raw_data.ScoreMap.add_arbitrary_string_data_from_pose(
+                    pose, string_map)
+        else:
+            # if prescore is set to false, assumes pose already has SAP info
+            pre_pose = pose.clone()
         # use per residue SAP to make a list of the worst offenders
         residue_sap_list = residue_sap_list_maker(pre_pose)
         sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
@@ -633,12 +642,15 @@ for pdb in pdbs:
                 cutoffs=cutoffs, flexbb=flexbb, relax_script=relax_script,
                 restraint=0, up_ele=up_ele, use_dssp=True,
                 use_sc_neighbors=use_sc_neighbors)
-        # rescore the designed pose
-        print("rescoring SAP:")
-        name_no_suffix += '_resurf'
-        post_pose = sap_score(new_pose, radius, name_no_suffix, score_map,
-                string_map, '')
-        sfd.write_pose(post_pose, score_map, name_no_suffix, string_map)
+        if rescore:
+            # rescore the designed pose
+            print("rescoring SAP:")
+            name_no_suffix += '_resurf'
+            post_pose = sap_score(new_pose, radius, name_no_suffix, score_map,
+                    string_map, '')
+            sfd.write_pose(post_pose, score_map, name_no_suffix, string_map)
+        else:
+            post_pose = new_pose.clone()
         if (pre_pose != None):
             if ( silent == '' ):
                 post_pose.dump_pdb(name_no_suffix + ".pdb")
