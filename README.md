@@ -11,15 +11,15 @@ TODO
 
 Redesign a folder full of pdbs, picking the worst 20 residues by SAP score:
 ```bash
-python redesign.py *.pdb --worst_n 20
+python redesign.py -worst_n 20 --pdbs *.pdb
 ```
 Redesign a single pdb, picking the worst 40 residues:
 ```bash
-python redesign.py A_REALLY_STICKY_PROTEIN.pdb --worst_n 40
+python redesign.py -worst_n 40 --pdbs A_REALLY_STICKY_PROTEIN.pdb 
 ```
 Redesign a all pdbs in a silent file:
 ```bash
-python redesign.py --in:file:silent in.silent
+python redesign.py -in:file:silent in.silent
 ```
 
 ## Contributing
