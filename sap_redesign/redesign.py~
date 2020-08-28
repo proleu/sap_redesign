@@ -18,7 +18,7 @@ __author__ = "Brian Coventry, Philip Leung"
 __copyright__ = None
 __credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
 __license__ = "MIT"
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __maintainer__ = "Philip Leung"
 __email__ = "pleung@cs.washington.edu"
 __status__ = "Prototype"
@@ -93,6 +93,7 @@ parser.add_argument("-relax_script", type=str, default='MonomerDesign2019')
 parser.add_argument("-up_ele", dest='up_ele', action='store_true')
 parser.add_argument("-no_prescore", dest='prescore', action='store_false')
 parser.add_argument("-no_rescore", dest='rescore', action='store_false')
+parser.add_argument("-chunk", dest='chunk', action='store_true')
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -109,6 +110,7 @@ relax_script = args.relax_script
 up_ele = args.up_ele
 prescore = args.prescore
 rescore = args.rescore
+chunk = args.chunk
 # TODO
 print(args)
 # TODO put this info into a file and just load the file, it should be faster
@@ -638,10 +640,22 @@ for pdb in pdbs:
         print("Worst residues by SAP that are allowed to be designed:",
                 ' '.join(str(x) for x in worst_resis))
         # redesign a new pose targeting the worst residues
-        new_pose = fast_design_with_options(pre_pose, to_design=worst_resis,
-                cutoffs=cutoffs, flexbb=flexbb, relax_script=relax_script,
-                restraint=0, up_ele=up_ele, use_dssp=True,
-                use_sc_neighbors=use_sc_neighbors)
+        if chunk:
+            new_pose = pre_pose.clone()
+            chunk_resis_list = [worst_resis[x:x+10] for x in range(0, len(
+                worst_resis), 10)]
+            for chunk_resis in chunk_resis_list:
+                new_pose = fast_design_with_options(new_pose,
+                        to_design=chunk_resis, cutoffs=cutoffs, flexbb=flexbb,
+                        relax_script=relax_script, restraint=0, 
+                        up_ele=up_ele, use_dssp=True,
+                        use_sc_neighbors=use_sc_neighbors)
+        else:
+            new_pose = fast_design_with_options(pre_pose,
+                    to_design=worst_resis, cutoffs=cutoffs, flexbb=flexbb,
+                    relax_script=relax_script, restraint=0, 
+                    up_ele=up_ele, use_dssp=True,
+                    use_sc_neighbors=use_sc_neighbors)
         if rescore:
             # rescore the designed pose
             print("rescoring SAP:")
