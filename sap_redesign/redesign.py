@@ -119,11 +119,6 @@ seq = ''
 for letter in alpha:
     seq += "AA%sAA"%letter
 
-sasa_pose = pose_from_sequence(seq)
-scorefxn = get_fa_scorefxn()
-all_sub = core.select.residue_selector.TrueResidueSelector().apply(sasa_pose)
-protocols.toolbox.pose_manipulation.repack_these_residues(all_sub, sasa_pose, scorefxn)
-
 def get_per_atom_sasa(pose, probe_size=1.1):
     atoms = core.id.AtomID_Map_bool_t()
     atoms.resize(pose.size())
@@ -133,6 +128,11 @@ def get_per_atom_sasa(pose, probe_size=1.1):
     # print(surf_vol.tot_surf)
     # print(surf_vol.surf(2, 1))  # this is per atom sasa (residue 2, atom 1)
     return surf_vol
+
+sasa_pose = pose_from_sequence(seq)
+scorefxn = get_fa_scorefxn()
+all_sub = core.select.residue_selector.TrueResidueSelector().apply(sasa_pose)
+protocols.toolbox.pose_manipulation.repack_these_residues(all_sub, sasa_pose, scorefxn)
 
 surf_vol = get_per_atom_sasa(sasa_pose)
 
