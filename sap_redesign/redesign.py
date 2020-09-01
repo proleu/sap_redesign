@@ -1,24 +1,18 @@
 #!/usr/bin/env python
-# This program accepts arguments like this:
-#./remove_superfluous_trp.py pdb1.pdb pdb2.pdb pdb3.pdb
-# or
-#./remove_superfluous_trp.py -in:file:silent my.silent
 # TODO fix max SASA calculation to read in a file, instead of calculating it everytime this damn script is called
 # TODO remove all unused utility functions
-# TODO figure out why voxel_array sometimes crashes?
+# TODO figure out why voxel_array sometimes crashes? is it because I didn't have /mnt/ ?
 # TODO better documentation, delta SAP? Delta SAP is somewhat nontrivial as it requires you to capture stdout while calling a function.
-# TODO more options: 
-# design recursively on small numbers since the offending ones are usually far away from each other
-# i also need to make it dump an individual score file 
-# so that there isn't any scorefile corruption if it is run in batches
+# TODO get rid of scorefile stuff
 
 # python libraries
 from __future__ import division
-__author__ = "Brian Coventry, Philip Leung"
+__author__ = "Brian Coventry, Derrick Hicks, Tim Huddy, Philip Leung"
 __copyright__ = None
-__credits__ = ["Brian Coventry", "Philip Leung", "Rosettacommons"]
+__credits__ = ["Brian Coventry", "Derrick Hicks", "Tim Huddy","Philip Leung",
+        "Rosettacommons"]
 __license__ = "MIT"
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __maintainer__ = "Philip Leung"
 __email__ = "pleung@cs.washington.edu"
 __status__ = "Prototype"
@@ -45,7 +39,7 @@ from pyrosetta.rosetta.core.select import residue_selector
 from pyrosetta.rosetta.core.select.residue_selector import (
     AndResidueSelector, NeighborhoodResidueSelector, NotResidueSelector,
     OrResidueSelector, PrimarySequenceNeighborhoodSelector,
-    ResidueIndexSelector)
+    ResidueIndexSelector, ResidueNameSelector)
 from pyrosetta.rosetta.core.scoring import ScoreFunction, ScoreType
 from pyrosetta.rosetta.core.scoring.methods import EnergyMethodOptions
 from pyrosetta.rosetta.core.pack.task import operation
@@ -626,6 +620,19 @@ for pdb in pdbs:
         sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
                                          reverse=True)
         # TODO check lock_PG
+        if lock_PG:
+            # get list of PRO and GLY positions
+            P_sel = ResidueNameSelector()
+            P_sel.set_residue_name3('PRO')
+            G_sel = ResidueNameSelector()
+            G_sel.set_residue_name3('GLY')
+            PG_sel = OrResidueSelector(P_sel, G_sel)
+            PG_list = list(get_residues_from_subset(PG_sel.apply(pre_pose)))
+            # combine into locked resis
+            lock_resis.extend(PG_list)
+            lock_resis = list(set(lock_resis))
+        else:
+            pass
         # check to see if each worst resi is allowed to be designed
         if len(lock_resis) == 0:
             worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
