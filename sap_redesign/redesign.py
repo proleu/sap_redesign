@@ -94,6 +94,7 @@ parser.add_argument("-up_ele", dest='up_ele', action='store_true')
 parser.add_argument("-no_prescore", dest='prescore', action='store_false')
 parser.add_argument("-no_rescore", dest='rescore', action='store_false')
 parser.add_argument("-chunk", dest='chunk', action='store_true')
+parser.add_argument("-lock_PG", dest='lock_PG', action='store_true')
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -111,6 +112,7 @@ up_ele = args.up_ele
 prescore = args.prescore
 rescore = args.rescore
 chunk = args.chunk
+lock_PG = args.lock_PG
 # TODO
 print(args)
 # TODO put this info into a file and just load the file, it should be faster
@@ -623,6 +625,7 @@ for pdb in pdbs:
         residue_sap_list = residue_sap_list_maker(pre_pose)
         sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
                                          reverse=True)
+        # TODO check lock_PG
         # check to see if each worst resi is allowed to be designed
         if len(lock_resis) == 0:
             worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
