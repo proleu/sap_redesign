@@ -1,8 +1,7 @@
 #!/usr/bin/env python
-# TODO fix max SASA calculation to read in a file, instead of calculating it everytime this damn script is called
 # TODO remove all unused utility functions
 # TODO figure out why voxel_array sometimes crashes? is it because I didn't have /mnt/ ?
-# TODO better documentation, delta SAP? Delta SAP is somewhat nontrivial as it requires you to capture stdout while calling a function.
+# TODO better documentation, delta SAP? As implemented, reporting the change in SAP requires stdout capture
 # TODO get rid of scorefile stuff
 
 # python libraries
@@ -54,7 +53,7 @@ from pyrosetta.rosetta.protocols.relax import FastRelax
 from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
 # Bcov libraries
 # TODO remove this dependency if possible?
-sys.path.append("/mnt//home/bcov/sc/random/npose")
+sys.path.append("/mnt/home/bcov/sc/random/npose")
 import voxel_array
 import npose_util
 import npose_util_pyrosetta as nup
@@ -69,7 +68,9 @@ flags = """
 -mute core.select.residue_selector.SecondaryStructureSelector
 -mute core.select.residue_selector.PrimarySequenceNeighborhoodSelector
 -mute protocols.DsspMover
+-mute all
 """
+print("TEST")
 pyrosetta.init(' '.join(flags.replace('\n\t', ' ').split()))
 # TODO add more defense here
 parser = argparse.ArgumentParser()
@@ -89,6 +90,9 @@ parser.add_argument("-no_prescore", dest='prescore', action='store_false')
 parser.add_argument("-no_rescore", dest='rescore', action='store_false')
 parser.add_argument("-chunk", dest='chunk', action='store_true')
 parser.add_argument("-lock_PG", dest='lock_PG', action='store_true')
+parser.add_argument("-force_mutation", dest='force_mutation',
+        action='store_true')
+parser.add_argument("-penalize_ARG", dest='penalize_ARG', action='store_true')
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -107,8 +111,8 @@ prescore = args.prescore
 rescore = args.rescore
 chunk = args.chunk
 lock_PG = args.lock_PG
-# TODO
-print(args)
+force_mutation = args.force_mutation
+penalize_ARG = args.penalize_ARG
 # TODO put this info into a file and just load the file, it should be faster
 alpha = "ACDEFGHIKLMNPQRSTVWY"
 seq = ''
@@ -459,28 +463,30 @@ def design_pack_lock_maker(design_resis:list) -> tuple:
     lock = operation.OperateOnResidueSubset(no_repack, not_packable)
     return design, pack, lock
 
-def favor_native_residue_maker(sfxn: ScoreFunction, restraint: float
+def disfavor_native_residue_maker(sfxn: ScoreFunction, restraint: float
                               ) -> FavorNativeResidue:
-    """Given options, returns a design, pack, and lock task operations.
+    """Given options, makes rosetta penalize the native residues.
 
     Args:
         sfxn (ScoreFunction): A Rosetta ScoreFunction. It will have the weight
-        for the res_type_constraint set to 1.
+        for the res_type_constraint set to -10.
         restraint (float): What bonus to pass to the FavorNativeResidue mover. 
         
     Returns:
-        favor_native_residue (FavorNativeResidue): The the FavorNativeResidue
-        mover set by the options, ready to be applied to a pose. 
+        disfavor_native_residue (FavorNativeResidue): The the 
+        FavorNativeResidue mover set by the options, ready to be applied to a 
+        pose. 
     """
-    sfxn.set_weight(ScoreType.res_type_constraint, 1.0)
+    sfxn.set_weight(ScoreType.res_type_constraint, -10.0)
     xml_string = """
     <MOVERS>
-        <FavorNativeResidue name="favor_native_residue" bonus="{}"/>
+        <FavorSequenceProfile name="disfavor" weight="{0}" 
+        use_current="true" matrix="IDENTITY"/>
     </MOVERS>
     """.format(restraint)
     xml_obj = XmlObjects.create_from_string(xml_string)
-    favor_native_residue = xml_obj.get_mover('favournative')
-    return favor_native_residue
+    disfavor_native_residue = xml_obj.get_mover('disfavor')
+    return disfavor_native_residue
 
 def relax_script_maker(relax_script:str
                       ) -> pyrosetta.rosetta.std.vector_std_string():
@@ -541,9 +547,9 @@ def fast_design_with_options(pose:Pose, to_design=[], cutoffs=(20,40),
     mm.set_bb(flexbb), mm.set_chi(True), mm.set_jump(False)
     # optionally enable FNR
     if restraint != 0:
-        favor_native_residue = favor_native_residue_maker(sfxn=sfxn_hard,
-                                                          restraint=restraint)
-        favor_native_residue.apply(pose)
+        disfavor_native_residue = disfavor_native_residue_maker(
+                sfxn=sfxn_hard, restraint=restraint)
+        disfavor_native_residue.apply(pose)
     else:
         pass
     # setup fast design
@@ -600,7 +606,6 @@ for pdb in pdbs:
 
         name_no_suffix = my_rstrip(my_rstrip(os.path.basename(pdb), ".gz"),
                 ".pdb")
-        sfd = core.io.raw_data.ScoreFileData("score.sc")
         score_map = std.map_std_string_double()
         string_map = std.map_std_string_std_string()
         if prescore:
@@ -608,10 +613,6 @@ for pdb in pdbs:
             print("prescoring SAP:")
             pre_pose = sap_score(pose, radius, name_no_suffix, score_map,
                     string_map, '')
-            core.io.raw_data.ScoreMap.add_arbitrary_score_data_from_pose(pose,
-                    score_map)
-            core.io.raw_data.ScoreMap.add_arbitrary_string_data_from_pose(
-                    pose, string_map)
         else:
             # if prescore is set to false, assumes pose already has SAP info
             pre_pose = pose.clone()
@@ -649,30 +650,55 @@ for pdb in pdbs:
                     worst_resis.append(residue)
         print("Worst residues by SAP that are allowed to be designed:",
                 ' '.join(str(x) for x in worst_resis))
+        if force_mutation:
+            restraint = 1
+        else:
+            restraint = 0
         # redesign a new pose targeting the worst residues
+        new_pose = pre_pose.clone()
+        if penalize_ARG:
+            # TODO put this in a function
+            xml_string = """
+    <MOVERS>
+        <AddCompositionConstraintMover name="penalty">
+            <Comp entry="PENALTY_DEFINITION;
+            TYPE ARG; ABSOLUTE 1; DELTA_START -1;DELTA_END 1;
+            PENALTIES 0 1 1.5;
+            BEFORE_FUNCTION CONSTANT; AFTER_FUNCTION CONSTANT;
+            END_PENALTY_DEFINITION;" />
+        </AddCompositionConstraintMover>
+    </MOVERS>
+            """
+            xml_obj = XmlObjects.create_from_string(xml_string)
+            less_arg = xml_obj.get_mover('penalty')
+            less_arg.apply(new_pose)
+        else:
+            pass
         if chunk:
-            new_pose = pre_pose.clone()
             chunk_resis_list = [worst_resis[x:x+10] for x in range(0, len(
                 worst_resis), 10)]
             for chunk_resis in chunk_resis_list:
                 new_pose = fast_design_with_options(new_pose,
                         to_design=chunk_resis, cutoffs=cutoffs, flexbb=flexbb,
-                        relax_script=relax_script, restraint=0, 
+                        relax_script=relax_script, restraint=restraint, 
                         up_ele=up_ele, use_dssp=True,
                         use_sc_neighbors=use_sc_neighbors)
+                if penalize_ARG:
+                    less_arg.apply(new_pose)
+                else:
+                    pass
         else:
-            new_pose = fast_design_with_options(pre_pose,
+            new_pose = fast_design_with_options(new_pose,
                     to_design=worst_resis, cutoffs=cutoffs, flexbb=flexbb,
-                    relax_script=relax_script, restraint=0, 
+                    relax_script=relax_script, restraint=restraint, 
                     up_ele=up_ele, use_dssp=True,
                     use_sc_neighbors=use_sc_neighbors)
+        name_no_suffix += '_resurf'
         if rescore:
             # rescore the designed pose
             print("rescoring SAP:")
-            name_no_suffix += '_resurf'
             post_pose = sap_score(new_pose, radius, name_no_suffix, score_map,
                     string_map, '')
-            sfd.write_pose(post_pose, score_map, name_no_suffix, string_map)
         else:
             post_pose = new_pose.clone()
         if (pre_pose != None):
