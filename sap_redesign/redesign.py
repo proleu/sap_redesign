@@ -6,12 +6,12 @@
 
 # python libraries
 from __future__ import division
-__author__ = "Brian Coventry, Derrick Hicks, Tim Huddy, Philip Leung"
+__author__ = "Brian Coventry, Tim Huddy, Philip Leung"
 __copyright__ = None
-__credits__ = ["Brian Coventry", "Derrick Hicks", "Tim Huddy","Philip Leung",
+__credits__ = ["Brian Coventry", "Tim Huddy","Philip Leung",
         "Rosettacommons"]
 __license__ = "MIT"
-__version__ = "0.6.0"
+__version__ = "0.8.0"
 __maintainer__ = "Philip Leung"
 __email__ = "pleung@cs.washington.edu"
 __status__ = "Prototype"
@@ -25,6 +25,7 @@ import sys
 import time
 # external libraries
 import numpy as np
+# pyrosetta libraries
 from pyrosetta import *
 from pyrosetta.rosetta import *
 from pyrosetta.rosetta.core.io.silent import (SilentFileData, 
@@ -52,12 +53,10 @@ from pyrosetta.rosetta.protocols.protein_interface_design import (
 from pyrosetta.rosetta.protocols.relax import FastRelax
 from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
 # Bcov libraries
-# TODO remove this dependency if possible?
 sys.path.append("/mnt/home/bcov/sc/random/npose")
 import voxel_array
 import npose_util
 import npose_util_pyrosetta as nup
-# TODO remove holes?
 flags = """
 -corrections::beta_nov16
 -holes:dalphaball 
@@ -68,8 +67,8 @@ flags = """
 -mute core.select.residue_selector.SecondaryStructureSelector
 -mute core.select.residue_selector.PrimarySequenceNeighborhoodSelector
 -mute protocols.DsspMover
--mute all
 """
+# TODO add -mute all
 pyrosetta.init(' '.join(flags.replace('\n\t', ' ').split()))
 # TODO add more defense here
 parser = argparse.ArgumentParser()
@@ -89,9 +88,12 @@ parser.add_argument("-no_prescore", dest='prescore', action='store_false')
 parser.add_argument("-no_rescore", dest='rescore', action='store_false')
 parser.add_argument("-chunk", dest='chunk', action='store_true')
 parser.add_argument("-lock_PG", dest='lock_PG', action='store_true')
-parser.add_argument("-force_mutation", dest='force_mutation',
+parser.add_argument("-encourage_mutation", dest='encourage_mutation',
         action='store_true')
 parser.add_argument("-penalize_ARG", dest='penalize_ARG', action='store_true')
+parser.add_argument("-restraint_weight", type=float, default=-1.0)
+parser.add_argument("-redesign_above", type=float, default=0.3)
+parser.add_argument("-redesign_below", type=float, default=0.0)
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -110,8 +112,15 @@ prescore = args.prescore
 rescore = args.rescore
 chunk = args.chunk
 lock_PG = args.lock_PG
-force_mutation = args.force_mutation
+encourage_mutation = args.encourage_mutation
 penalize_ARG = args.penalize_ARG
+restraint_weight = args.restraint_weight
+redesign_above = args.redesign_above
+redesign_below = args.redesign_below
+
+if (redesign_above != 0 and redesign_below != 0):
+    print("Please select a single cutoff for selecting residues to redesign")
+    raise NotImplementedError
 # TODO put this info into a file and just load the file, it should be faster
 alpha = "ACDEFGHIKLMNPQRSTVWY"
 seq = ''
@@ -475,21 +484,23 @@ def disfavor_native_residue_maker(sfxn: ScoreFunction, restraint: float
 
     Args:
         sfxn (ScoreFunction): A Rosetta ScoreFunction. It will have the weight
-        for the res_type_constraint set to -10.
-        restraint (float): What bonus to pass to the FavorNativeResidue mover. 
+        for the res_type_constraint set to the restraint value.
+        restraint (float): What weight set res_type_constraint to. A positive 
+        value will reward native sequence conservation, a negative value will
+        penalize it.
         
     Returns:
         disfavor_native_residue (FavorNativeResidue): The the 
         FavorNativeResidue mover set by the options, ready to be applied to a 
         pose. 
     """
-    sfxn.set_weight(ScoreType.res_type_constraint, -10.0)
+    sfxn.set_weight(ScoreType.res_type_constraint, restraint)
     xml_string = """
     <MOVERS>
-        <FavorSequenceProfile name="disfavor" weight="{0}" 
+        <FavorSequenceProfile name="disfavor" weight="1" 
         use_current="true" matrix="IDENTITY"/>
     </MOVERS>
-    """.format(restraint)
+    """
     xml_obj = XmlObjects.create_from_string(xml_string)
     disfavor_native_residue = xml_obj.get_mover('disfavor')
     return disfavor_native_residue
@@ -590,7 +601,6 @@ def residue_sap_list_maker(pose:Pose) -> list:
 # TODO implement actual main?
 ############### BEGIN MAIN FUNCTION ###########################
 
-
 if silent != '':
     sfd_in = SilentFileData(SilentFileOptions())
     sfd_in.read_file(silent)
@@ -647,19 +657,25 @@ for pdb in pdbs:
             worst_resis = []
             print("The residues that will not be designed:",
                     ' '.join(str(x) for x in lock_resis))
-            for residue, sap in sorted_residue_sap_list:
+            for residue, residue_score in sorted_residue_sap_list:
                 if len(worst_resis) >= worst_n:
                     break
                 elif residue in lock_resis:
                     pass
-                elif sap < 0.3:
+                elif redesign_above != 0:
+                    if residue_score < redesign_above:
+                        pass
+                elif redesign_below != 0:
+                    if residue_score > redesign_below:
+                        pass
+                elif residue_score < 0.3: # TODO add cutoff behavior
                     pass
                 else:
                     worst_resis.append(residue)
         print("Worst residues by SAP that are allowed to be designed:",
                 ' '.join(str(x) for x in worst_resis))
-        if force_mutation:
-            restraint = 1
+        if encourage_mutation:
+            restraint = restraint_weight
         else:
             restraint = 0
         # redesign a new pose targeting the worst residues
