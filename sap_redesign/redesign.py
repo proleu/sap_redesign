@@ -342,6 +342,9 @@ def generic_layer_dict_maker() -> dict:
     Returns:
         layer_dict (dict): The dict mapping standard layer definitions to 
         their allowed amino acids.
+    
+    TODO: 
+        As of versions > 0.7.0, made layers more restrictive such that 
     """
     layer_dict = {"core AND helix_start": 'AFILVWYNQSTHP',
                   # "core AND helix": 'AFILVWYNQHM',

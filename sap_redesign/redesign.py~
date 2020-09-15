@@ -314,7 +314,7 @@ def sfxn_hard_maker(const_bb=True, up_ele=False) -> ScoreFunction:
     sfxn_hard.set_weight(ScoreType.aa_composition, 1.0)
     sfxn_hard.set_weight(ScoreType.approximate_buried_unsat_penalty, 5.0)
     emo = sfxn_hard.energy_method_options()
-    emo.approximate_buried_unsat_penalty_burial_atomic_depth(4.0)
+    emo.approximate_buried_unsat_penalty_burial_atomic_depth(3.0)
     emo.approximate_buried_unsat_penalty_hbond_energy_threshold(-0.2)	
     if const_bb:
         emo.approximate_buried_unsat_penalty_assume_const_backbone(1)
@@ -344,11 +344,14 @@ def generic_layer_dict_maker() -> dict:
         their allowed amino acids.
     """
     layer_dict = {"core AND helix_start": 'AFILVWYNQSTHP',
-                  "core AND helix": 'AFILVWYNQHM',
+                  # "core AND helix": 'AFILVWYNQHM',
+                  "core AND helix": 'AILVYNQHM',
                   "core AND loop": 'AFGILPVWYDENQSTHM',
                   "core AND sheet": 'FILVWYDENQSTH',
-                  "boundary AND helix_start": 'ADEHIKLNPQRSTVY',
-                  "boundary AND helix": 'ADEHIKLNQRSTVYM',
+                  #"boundary AND helix_start": 'ADEHIKLNPQRSTVY',
+                  "boundary AND helix_start": 'ADEHKNPQRST',
+                  #"boundary AND helix": 'ADEHIKLNQRSTVYM',
+                  "boundary AND helix": 'ADEHKNQRST',
                   "boundary AND loop": 'ADEFGHIKLNPQRSTVY',
                   "boundary AND sheet": 'DEFHIKLNQRSTVY',
                   "surface AND helix_start": 'DEHKPQR',
@@ -644,6 +647,8 @@ for pdb in pdbs:
                 if len(worst_resis) >= worst_n:
                     break
                 elif residue in lock_resis:
+                    pass
+                elif sap < 0.3:
                     pass
                 else:
                     worst_resis.append(residue)
