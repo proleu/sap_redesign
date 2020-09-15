@@ -314,6 +314,7 @@ def sfxn_hard_maker(const_bb=True, up_ele=False) -> ScoreFunction:
     sfxn_hard.set_weight(ScoreType.aa_composition, 1.0)
     sfxn_hard.set_weight(ScoreType.approximate_buried_unsat_penalty, 5.0)
     emo = sfxn_hard.energy_method_options()
+    # shallower cutoff of 3 as opposed to 4, which is usual. 
     emo.approximate_buried_unsat_penalty_burial_atomic_depth(3.0)
     emo.approximate_buried_unsat_penalty_hbond_energy_threshold(-0.2)	
     if const_bb:
