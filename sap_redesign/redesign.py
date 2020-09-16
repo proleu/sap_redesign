@@ -101,121 +101,58 @@ parser.add_argument("-encourage_mutation", dest='encourage_mutation',
         action='store_true')
 parser.add_argument("-restraint_weight", type=float, default=-1.0)
 
-args = parser.parse_args(sys.argv[1:])
-print("Redesign will proceed with the following options:")
-print(args)
-pdbs = args.pdbs
-silent = args.__getattribute__("in:file:silent")
-worst_n = args.worst_n
-zero_adjust = args.zero_adjust
-radius = args.radius
-flexbb = args.flexbb
-use_sasa = args.use_sasa
-lock_resis = args.lock_resis
-cutoffs = tuple(args.cutoffs)
-relax_script = args.relax_script
-up_ele = args.up_ele
-prescore = args.prescore
-rescore = args.rescore
-chunk = args.chunk
-lock_HNQST = args.lock_HNQST
-lock_PG = args.lock_PG
-lock_YW = args.lock_YW
-penalize_ARG = args.penalize_ARG
-encourage_mutation = args.encourage_mutation
-restraint_weight = args.restraint_weight
-redesign_above = args.redesign_above
-redesign_below = args.redesign_below
-# a hack to avoid changing a lot of code don't judge
-use_sc_neighbors = not use_sasa
-# TODO add more defense here
-if (redesign_above != 0 and redesign_below != 0):
-    print("Please select a single cutoff for selecting residues to redesign")
-    raise NotImplementedError
-# TODO put this info into a file and just load the file, it should be faster
-alpha = "ACDEFGHIKLMNPQRSTVWY"
-seq = ''
-for letter in alpha:
-    seq += "AA%sAA"%letter
-
-def get_per_atom_sasa(pose, probe_size=1.1):
-    atoms = core.id.AtomID_Map_bool_t()
-    atoms.resize(pose.size())
-    for i in range(1, pose.size()+1):
-        atoms.resize( i, pose.residue(i).natoms(), True)
-    surf_vol = core.scoring.packing.get_surf_vol( pose, atoms, probe_size)
-    return surf_vol
-
-sasa_pose = pose_from_sequence(seq)
-scorefxn = get_fa_scorefxn()
-all_sub = core.select.residue_selector.TrueResidueSelector().apply(sasa_pose)
-protocols.toolbox.pose_manipulation.repack_these_residues(all_sub, sasa_pose, scorefxn)
-
-surf_vol = get_per_atom_sasa(sasa_pose)
-
-max_sasa = {}
-for i in range(len(alpha)):
-    resnum = i*5+3
-    letter = alpha[i]
-
-    sasa = 0
-    res = sasa_pose.residue(resnum)
-    assert(res.name1() == letter)
-    for atno in range(1, res.natoms()+1):
-        if ( res.atom_is_backbone(atno) ):
-            continue
-        sasa += surf_vol.surf(resnum, atno)
-
-    max_sasa[letter] = sasa
-
-# Development of hydrophobicity parameters to analyze proteins which bear post- or cotranslational modifications
-# then you subtract 0.5 from scaled
-hydrophobicity = {
-    'A': 0.116,
-    'C': 0.18,
-    'D': -0.472,
-    'E': -0.457,
-    'F': 0.5,
-    'G': 0.001,
-    'H': -0.335,
-    'I': 0.443,
-    'K': -0.217,
-    'L': 0.443,
-    'M': 0.238,
-    'N': -0.264,
-    'P': 0.211,
-    'Q': -0.249,
-    'R': -0.5,
-    'S': -0.141,
-    'T': -0.05,
-    'V': 0.325,
-    'W': 0.378,
-    'Y': 0.38,
-}
-# TODO remove this?
-scorefxn = core.scoring.ScoreFunctionFactory.create_score_function("beta_nov16")
-
-def fix_scorefxn(sfxn, allow_double_bb=False):
-    opts = sfxn.energy_method_options()
-    opts.hbond_options().decompose_bb_hb_into_pair_energies(True)
-    opts.hbond_options().bb_donor_acceptor_check(not allow_double_bb)
-    opts.hbond_options().use_hb_env_dep(True)
-    #opts.elec_context_dependent(True)
-
-    sfxn.set_energy_method_options(opts)
-
-fix_scorefxn(scorefxn)
-
-def my_rstrip(string, strip):
-    if (string.endswith(strip)):
-        return string[:-len(strip)]
-    return string
 
 # Developability index: a rapid in silico tool for the screening of antibody aggregation propensity.
 def sap_score(pose, radius, name_no_suffix, out_score_map, out_string_map,
-        suffix):
+        suffix, zero_adjust):
     # R from the paper is 5
     R = radius
+    # Development of hydrophobicity parameters to analyze proteins which bear post- or cotranslational modifications
+    # then you subtract 0.5 from scaled
+    hydrophobicity = {
+        'A': 0.116,
+        'C': 0.18,
+        'D': -0.472,
+        'E': -0.457,
+        'F': 0.5,
+        'G': 0.001,
+        'H': -0.335,
+        'I': 0.443,
+        'K': -0.217,
+        'L': 0.443,
+        'M': 0.238,
+        'N': -0.264,
+        'P': 0.211,
+        'Q': -0.249,
+        'R': -0.5,
+        'S': -0.141,
+        'T': -0.05,
+        'V': 0.325,
+        'W': 0.378,
+        'Y': 0.38,
+    }
+    max_sasa = {
+            'A': 60.92838710394679, 
+            'C': 87.69781472008721, 
+            'D': 92.90391166066215, 
+            'E': 122.88603427090675, 
+            'F': 169.3483818866212, 
+            'G': 0, 
+            'H': 145.4356924808598, 
+            'I': 138.7893503649479, 
+            'K': 166.59514526133574, 
+            'L': 139.23818059219622, 
+            'M': 144.91845035026915, 
+            'N': 102.23351599614529, 
+            'P': 97.53505848923146, 
+            'Q': 125.3684583287609, 
+            'R': 186.1814228248932, 
+            'S': 69.12103617846579, 
+            'T': 96.34149409391819, 
+            'V': 112.61829513370847, 
+            'W': 193.23465173310578, 
+            'Y': 176.41705079710476
+            }
     surf_vol = get_per_atom_sasa(pose)
     # get the per res base stats
     res_max_sasa = [None]
@@ -644,160 +581,223 @@ def residue_sap_list_maker(pose:Pose) -> list:
         
     return residue_sap_list
 
+def get_per_atom_sasa(pose, probe_size=1.1):
+    atoms = core.id.AtomID_Map_bool_t()
+    atoms.resize(pose.size())
+    for i in range(1, pose.size()+1):
+        atoms.resize( i, pose.residue(i).natoms(), True)
+    surf_vol = core.scoring.packing.get_surf_vol( pose, atoms, probe_size)
+    return surf_vol
+
+def fix_scorefxn(sfxn, allow_double_bb=False):
+    opts = sfxn.energy_method_options()
+    opts.hbond_options().decompose_bb_hb_into_pair_energies(True)
+    opts.hbond_options().bb_donor_acceptor_check(not allow_double_bb)
+    opts.hbond_options().use_hb_env_dep(True)
+    #opts.elec_context_dependent(True)
+
+    sfxn.set_energy_method_options(opts)
+
+
+def my_rstrip(string, strip):
+    if (string.endswith(strip)):
+        return string[:-len(strip)]
+    return string
 # TODO implement actual main? Begin Main:
+def main():
+    args = parser.parse_args(sys.argv[1:])
+    print("Redesign will proceed with the following options:")
+    print(args)
+    pdbs = args.pdbs
+    silent = args.__getattribute__("in:file:silent")
+    worst_n = args.worst_n
+    zero_adjust = args.zero_adjust
+    radius = args.radius
+    flexbb = args.flexbb
+    use_sasa = args.use_sasa
+    lock_resis = args.lock_resis
+    cutoffs = tuple(args.cutoffs)
+    relax_script = args.relax_script
+    up_ele = args.up_ele
+    prescore = args.prescore
+    rescore = args.rescore
+    chunk = args.chunk
+    lock_HNQST = args.lock_HNQST
+    lock_PG = args.lock_PG
+    lock_YW = args.lock_YW
+    penalize_ARG = args.penalize_ARG
+    encourage_mutation = args.encourage_mutation
+    restraint_weight = args.restraint_weight
+    redesign_above = args.redesign_above
+    redesign_below = args.redesign_below
+    # a hack to avoid changing a lot of code don't judge
+    use_sc_neighbors = not use_sasa
+    # TODO add more defense here
+    if (redesign_above != 0 and redesign_below != 0):
+        print("Please select a single cutoff for selecting residues to redesign")
+        raise NotImplementedError
 
-if (silent != ''):
-    sfd_in = SilentFileData(SilentFileOptions())
-    sfd_in.read_file(silent)
-    pdbs = list(sfd_in.tags())
-    sfd_out = SilentFileData("out.silent", False, False, 'binary',
-            SilentFileOptions())
+    if (silent != ''):
+        sfd_in = SilentFileData(SilentFileOptions())
+        sfd_in.read_file(silent)
+        pdbs = list(sfd_in.tags())
+        sfd_out = SilentFileData("out.silent", False, False, 'binary',
+                SilentFileOptions())
+    for pdb in pdbs:
+        t0 = time.time()
+        print("Attempting pose: " + pdb)
+        for k in [1]:
+            if (silent == ''):
+                pose = pose_from_file(pdb)
+            else:
+                pose = Pose()
+                sfd_in.get_structure(pdb).fill_pose(pose)
 
-for pdb in pdbs:
-    t0 = time.time()
-    print("Attempting pose: " + pdb)
-    for k in [1]:
-        if (silent == ''):
-            pose = pose_from_file(pdb)
-        else:
-            pose = Pose()
-            sfd_in.get_structure(pdb).fill_pose(pose)
-
-        name_no_suffix = my_rstrip(my_rstrip(os.path.basename(pdb), ".gz"),
-                ".pdb")
-        score_map = std.map_std_string_double()
-        string_map = std.map_std_string_std_string()
-        if prescore:
-            # get SAP score for the pose
-            print("Prescoring SAP:")
-            pre_pose = sap_score(pose, radius, name_no_suffix, score_map,
-                    string_map, '')
-        else:
-            # if prescore is set to false, assumes pose b-factors have score
-            pre_pose = pose.clone()
-        # use per residue SAP to make a list of the worst offenders
-        residue_sap_list = residue_sap_list_maker(pre_pose)
-        sorted_residue_sap_list = sorted(residue_sap_list, key=lambda x: x[1],
-                                         reverse=True)
-        if lock_HNQST:
-            # get list of HIS, ASN, GLN, SER, THR positions
-            H_sel = ResidueNameSelector()
-            H_sel.set_residue_name3('HIS')
-            N_sel = ResidueNameSelector()
-            N_sel.set_residue_name3('ASN')
-            Q_sel = ResidueNameSelector()
-            Q_sel.set_residue_name3('GLN')
-            S_sel = ResidueNameSelector()
-            S_sel.set_residue_name3('SER')
-            T_sel = ResidueNameSelector()
-            T_sel.set_residue_name3('THR')
-            HN_sel = OrResidueSelector(H_sel, N_sel)
-            QS_sel = OrResidueSelector(Q_sel, S_sel)
-            HNQS_sel = OrResidueSelector(HN_sel, QS_sel)
-            the_sel = OrResidueSelector(HNQS_sel, T_sel)
-            the_list = list(get_residues_from_subset(the_sel.apply(pre_pose)))
-            # combine into locked resis
-            lock_resis.extend(the_list)
-            lock_resis = list(set(lock_resis))
-        else:
-            pass
-        if lock_PG:
-            # get list of PRO and GLY positions
-            P_sel = ResidueNameSelector()
-            P_sel.set_residue_name3('PRO')
-            G_sel = ResidueNameSelector()
-            G_sel.set_residue_name3('GLY')
-            PG_sel = OrResidueSelector(P_sel, G_sel)
-            PG_list = list(get_residues_from_subset(PG_sel.apply(pre_pose)))
-            # combine into locked resis
-            lock_resis.extend(PG_list)
-            lock_resis = list(set(lock_resis))
-        else:
-            pass
-        if lock_YW:
-            # get list of TYR and TRP positions
-            Y_sel = ResidueNameSelector()
-            Y_sel.set_residue_name3('TYR')
-            W_sel = ResidueNameSelector()
-            W_sel.set_residue_name3('TRP')
-            YW_sel = OrResidueSelector(Y_sel, W_sel)
-            YW_list = list(get_residues_from_subset(YW_sel.apply(pre_pose)))
-            # combine into locked resis
-            lock_resis.extend(YW_list)
-            lock_resis = list(set(lock_resis))
-        else:
-            pass
-        # check to see if each worst resi is allowed to be designed
-        print("Residues that will NOT be designed:",
-                    ' '.join(str(x) for x in lock_resis))
-        worst_resis = []
-        for residue, residue_score in sorted_residue_sap_list:
-            if len(worst_resis) >= worst_n:
-                break
+            name_no_suffix = my_rstrip(my_rstrip(os.path.basename(pdb),
+                ".gz"), ".pdb")
+            score_map = std.map_std_string_double()
+            string_map = std.map_std_string_std_string()
+            if prescore:
+                # get SAP score for the pose
+                print("Prescoring SAP:")
+                pre_pose = sap_score(pose, radius, name_no_suffix, score_map,
+                        string_map, '', zero_adjust)
+            else:
+                # if prescore is set to false, assumes pose b-factors have score
+                pre_pose = pose.clone()
+            # use per residue SAP to make a list of the worst offenders
+            residue_sap_list = residue_sap_list_maker(pre_pose)
+            sorted_residue_sap_list = sorted(residue_sap_list, 
+                    key=lambda x: x[1], reverse=True)
+            if lock_HNQST:
+                # get list of HIS, ASN, GLN, SER, THR positions
+                H_sel = ResidueNameSelector()
+                H_sel.set_residue_name3('HIS')
+                N_sel = ResidueNameSelector()
+                N_sel.set_residue_name3('ASN')
+                Q_sel = ResidueNameSelector()
+                Q_sel.set_residue_name3('GLN')
+                S_sel = ResidueNameSelector()
+                S_sel.set_residue_name3('SER')
+                T_sel = ResidueNameSelector()
+                T_sel.set_residue_name3('THR')
+                HN_sel = OrResidueSelector(H_sel, N_sel)
+                QS_sel = OrResidueSelector(Q_sel, S_sel)
+                HNQS_sel = OrResidueSelector(HN_sel, QS_sel)
+                the_sel = OrResidueSelector(HNQS_sel, T_sel)
+                the_list = list(get_residues_from_subset(
+                    the_sel.apply(pre_pose)))
+                # combine into locked resis
+                lock_resis.extend(the_list)
+                lock_resis = list(set(lock_resis))
             else:
                 pass
-            print("Residue:", residue, "Score:", residue_score)
-            if residue in lock_resis:
-                continue
-            elif (redesign_above != 0.0 and residue_score < redesign_above):
-                continue
-            elif (redesign_below != 0.0 and residue_score > redesign_below):
-                continue
+            if lock_PG:
+                # get list of PRO and GLY positions
+                P_sel = ResidueNameSelector()
+                P_sel.set_residue_name3('PRO')
+                G_sel = ResidueNameSelector()
+                G_sel.set_residue_name3('GLY')
+                PG_sel = OrResidueSelector(P_sel, G_sel)
+                PG_list = list(get_residues_from_subset(
+                    PG_sel.apply(pre_pose)))
+                # combine into locked resis
+                lock_resis.extend(PG_list)
+                lock_resis = list(set(lock_resis))
             else:
-                worst_resis.append(residue)
-                print("Residue {0} added for redesign".format(residue))
-        print("Residues that will be designed:",
-                ' '.join(str(x) for x in worst_resis))
-        if encourage_mutation:
-            restraint = restraint_weight
-        else:
-            restraint = 0
-        # redesign a new pose targeting the worst residues
-        new_pose = pre_pose.clone()
-        if penalize_ARG:
-            less_ARG = less_ARG_maker()
-            less_ARG.apply(new_pose)
-        else:
-            pass
-        if chunk:
-            chunk_resis_list = [worst_resis[x:x+10] for x in range(0, len(
-                worst_resis), 10)]
-            for chunk_resis in chunk_resis_list:
+                pass
+            if lock_YW:
+                # get list of TYR and TRP positions
+                Y_sel = ResidueNameSelector()
+                Y_sel.set_residue_name3('TYR')
+                W_sel = ResidueNameSelector()
+                W_sel.set_residue_name3('TRP')
+                YW_sel = OrResidueSelector(Y_sel, W_sel)
+                YW_list = list(get_residues_from_subset(
+                    YW_sel.apply(pre_pose)))
+                # combine into locked resis
+                lock_resis.extend(YW_list)
+                lock_resis = list(set(lock_resis))
+            else:
+                pass
+            # check to see if each worst resi is allowed to be designed
+            print("Residues that will NOT be designed:",
+                        ' '.join(str(x) for x in lock_resis))
+            worst_resis = []
+            for residue, residue_score in sorted_residue_sap_list:
+                if len(worst_resis) >= worst_n:
+                    break
+                else:
+                    pass
+                print("Residue:", residue, "Score:", residue_score)
+                if residue in lock_resis:
+                    continue
+                elif (
+                        redesign_above != 0.0 
+                        and residue_score < redesign_above
+                        ):
+                    continue
+                elif (
+                        redesign_below != 0.0 
+                        and residue_score > redesign_below
+                        ):
+                    continue
+                else:
+                    worst_resis.append(residue)
+                    print("Residue {0} added for redesign".format(residue))
+            print("Residues that will be designed:",
+                    ' '.join(str(x) for x in worst_resis))
+            if encourage_mutation:
+                restraint = restraint_weight
+            else:
+                restraint = 0
+            # redesign a new pose targeting the worst residues
+            new_pose = pre_pose.clone()
+            if penalize_ARG:
+                less_ARG = less_ARG_maker()
+                less_ARG.apply(new_pose)
+            else:
+                pass
+            if chunk:
+                chunk_resis_list = [worst_resis[x:x+10] for x in range(0, len(
+                    worst_resis), 10)]
+                for chunk_resis in chunk_resis_list:
+                    new_pose = fast_design_with_options(new_pose,
+                            to_design=chunk_resis, cutoffs=cutoffs, 
+                            flexbb=flexbb, relax_script=relax_script,
+                            restraint=restraint, up_ele=up_ele, use_dssp=True,
+                            use_sc_neighbors=use_sc_neighbors)
+                    if penalize_ARG:
+                        less_ARG.apply(new_pose)
+                    else:
+                        pass
+            else:
                 new_pose = fast_design_with_options(new_pose,
-                        to_design=chunk_resis, cutoffs=cutoffs, flexbb=flexbb,
+                        to_design=worst_resis, cutoffs=cutoffs, flexbb=flexbb,
                         relax_script=relax_script, restraint=restraint, 
                         up_ele=up_ele, use_dssp=True,
                         use_sc_neighbors=use_sc_neighbors)
-                if penalize_ARG:
-                    less_ARG.apply(new_pose)
-                else:
-                    pass
-        else:
-            new_pose = fast_design_with_options(new_pose,
-                    to_design=worst_resis, cutoffs=cutoffs, flexbb=flexbb,
-                    relax_script=relax_script, restraint=restraint, 
-                    up_ele=up_ele, use_dssp=True,
-                    use_sc_neighbors=use_sc_neighbors)
-        name_no_suffix += '_resurf'
-        if rescore:
-            # rescore the designed pose
-            print("Rescoring SAP:")
-            post_pose = sap_score(new_pose, radius, name_no_suffix, score_map,
-                    string_map, '')
-        else:
-            post_pose = new_pose.clone()
-        if (pre_pose != None):
-            if (silent == ''):
-                post_pose.dump_pdb(name_no_suffix + ".pdb")
+            name_no_suffix += '_resurf'
+            if rescore:
+                # rescore the designed pose
+                print("Rescoring SAP:")
+                post_pose = sap_score(new_pose, radius, name_no_suffix, 
+                        score_map, string_map, '', zero_adjust)
             else:
-                struct = sfd_out.create_SilentStructOP()
-                struct.fill_struct(post_pose, name_no_suffix)
-                sfd_out.add_structure(struct)
+                post_pose = new_pose.clone()
+            if (pre_pose != None):
+                if (silent == ''):
+                    post_pose.dump_pdb(name_no_suffix + ".pdb")
+                else:
+                    struct = sfd_out.create_SilentStructOP()
+                    struct.fill_struct(post_pose, name_no_suffix)
+                    sfd_out.add_structure(struct)
 
-        seconds = int(time.time() - t0)
-        print("protocols.jd2.JobDistributor: {0} reported success in {1} \
-                seconds".format(name_no_suffix, seconds))
+            seconds = int(time.time() - t0)
+            print("protocols.jd2.JobDistributor: {0} reported success in {1} \
+                    seconds".format(name_no_suffix, seconds))
 
-if (silent != ''):
-    sfd_out.write_all("out.silent", False)
-
+    if (silent != ''):
+        sfd_out.write_all("out.silent", False)
+if __name__ == "__main__":
+    main()

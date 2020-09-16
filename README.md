@@ -11,7 +11,7 @@ TODO
 
 Redesign a folder full of pdbs, picking the worst 20 residues by SAP score:
 ```bash
-TODO
+~/sap_redesign/sap_redesign/redesign.py -worst_n 20 -redesign_above 0.3 --pdbs *.pdb
 ```
 Redesign a single pdb, picking the worst 40 residues:
 ```bash
