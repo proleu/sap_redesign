@@ -67,6 +67,8 @@ flags = """
 -mute core.select.residue_selector.SecondaryStructureSelector
 -mute core.select.residue_selector.PrimarySequenceNeighborhoodSelector
 -mute protocols.DsspMover
+-mute core.chemical
+-mute core.conformation
 """
 # TODO add -mute all
 pyrosetta.init(' '.join(flags.replace('\n\t', ' ').split()))
@@ -96,7 +98,8 @@ parser.add_argument("-redesign_above", type=float, default=0.3)
 parser.add_argument("-redesign_below", type=float, default=0.0)
 
 args = parser.parse_args(sys.argv[1:])
-
+# TODO
+print(args)
 pdbs = args.pdbs
 silent = args.__getattribute__("in:file:silent")
 worst_n = args.worst_n
@@ -207,7 +210,8 @@ def sap_score(pose, radius, name_no_suffix, out_score_map, out_string_map,
         suffix):
     # R from the paper
     R = radius
-    pose = pose.split_by_chain()[1]
+    # TODO make sure this works for multichain poses
+    # pose = pose.split_by_chain()[1]
     surf_vol = get_per_atom_sasa(pose)
     # get the per res base stats
     res_max_sasa = [None]
@@ -651,27 +655,28 @@ for pdb in pdbs:
         else:
             pass
         # check to see if each worst resi is allowed to be designed
-        if len(lock_resis) == 0:
-            worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
-        else:
-            worst_resis = []
-            print("The residues that will not be designed:",
+        # if len(lock_resis) == 0:
+        #     worst_resis = [x[0] for x in sorted_residue_sap_list[:worst_n]]
+        # else:
+        #     worst_resis = []
+        print("The residues that will not be designed:",
                     ' '.join(str(x) for x in lock_resis))
-            for residue, residue_score in sorted_residue_sap_list:
-                if len(worst_resis) >= worst_n:
-                    break
-                elif residue in lock_resis:
-                    pass
-                elif redesign_above != 0:
-                    if residue_score < redesign_above:
-                        pass
-                elif redesign_below != 0:
-                    if residue_score > redesign_below:
-                        pass
-                elif residue_score < 0.3: # TODO add cutoff behavior
-                    pass
-                else:
-                    worst_resis.append(residue)
+        worst_resis = []
+        for residue, residue_score in sorted_residue_sap_list:
+            if len(worst_resis) >= worst_n:
+                break
+            else:
+                pass
+            print("Residue:", residue, "Score:", residue_score)
+            if residue in lock_resis:
+                continue
+            elif (redesign_above != 0.0 and residue_score < redesign_above):
+                continue
+            elif (redesign_below != 0.0 and residue_score > redesign_below):
+                continue
+            else:
+                worst_resis.append(residue)
+                print("Residue {0} added for redesign".format(residue))
         print("Worst residues by SAP that are allowed to be designed:",
                 ' '.join(str(x) for x in worst_resis))
         if encourage_mutation:
