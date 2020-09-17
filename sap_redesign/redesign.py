@@ -72,34 +72,57 @@ flags = """
 -mute core.scoring
 """
 pyrosetta.init(' '.join(flags.replace('\n\t', ' ').split()))
-# TODO add required and optional argument groups
-parser = argparse.ArgumentParser()
-parser.add_argument("-in:file:silent", type=str, default='')
-parser.add_argument("--pdbs", type=str, nargs='*')
-
-parser.add_argument("-redesign_above", type=float, default=0.0)
-parser.add_argument("-redesign_below", type=float, default=0.0)
-
-parser.add_argument("-zero_adjust", type=float, default=0)
-parser.add_argument("-worst_n", type=int, default=25)
-parser.add_argument("-radius", type=int, default=5)
-parser.add_argument("-flexbb", dest='flexbb', action='store_true')
-parser.add_argument("-use_sasa", dest='use_sasa',
-        action='store_true')
-parser.add_argument("-lock_resis", type=int, nargs='*', default=[])
-parser.add_argument("-cutoffs", type=float, nargs='*', default=[20,40])
-parser.add_argument("-relax_script", type=str, default='MonomerDesign2019')
-parser.add_argument("-up_ele", dest='up_ele', action='store_true')
-parser.add_argument("-no_prescore", dest='prescore', action='store_false')
-parser.add_argument("-no_rescore", dest='rescore', action='store_false')
-parser.add_argument("-chunk", dest='chunk', action='store_true')
-parser.add_argument("-lock_HNQST", dest='lock_HNQST', action='store_true')
-parser.add_argument("-lock_PG", dest='lock_PG', action='store_true')
-parser.add_argument("-lock_YW", dest='lock_YW', action='store_true')
-parser.add_argument("-penalize_ARG", dest='penalize_ARG', action='store_true')
-parser.add_argument("-encourage_mutation", dest='encourage_mutation',
-        action='store_true')
-parser.add_argument("-restraint_weight", type=float, default=-1.0)
+# positional arguments
+parser = argparse.ArgumentParser(
+        description="Use to redesign based on per-residue score in b-factor.")
+ingroup = parser.add_argument_group("input filename(s)")
+inputs = ingroup.add_mutually_exclusive_group(required=True)
+inputs.add_argument("--in:file:silent", type=str)#, default='')
+inputs.add_argument("--pdbs", type=str, nargs='*')
+# required arguments
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument("--redesign_above", type=float,
+        help="any residue above this score will be redesigned")
+group.add_argument("--redesign_below", type=float,
+        help="any residue below this score will be redesigned")
+# optional arguments
+parser.add_argument("--zero_adjust", type=float, default=0)
+parser.add_argument("--worst_n", type=int, default=25,
+        help="the worst n residues that don't meet the cutoff to redesign")
+parser.add_argument("--radius", type=int, default=5,
+        help="the radius size for the voxel grid")
+parser.add_argument("--flexbb", dest='flexbb', action='store_true',
+        help="turns on flexible bb design")
+parser.add_argument("--use_sasa", dest='use_sasa', action='store_true',
+        help="use SASA to designate layers instead of # neighbors")
+parser.add_argument("--cutoffs", type=float, nargs='*', default=[20,40],
+        help="layer definition cutoffs for SASA or # neighbors")
+parser.add_argument("--lock_resis", type=int, nargs='*', default=[],
+        help="list of residue indices not to design, ex 1 7 9 11")
+parser.add_argument("--relax_script", type=str, default='MonomerDesign2019',
+        help="the name of the relax script to use")
+parser.add_argument("--up_ele", dest='up_ele', action='store_true',
+        help="turns on upweighting of electrostatic interactions")
+parser.add_argument("--no_prescore", dest='prescore', action='store_false',
+        help="skip calculating SAP score, useful if file is already scored")
+parser.add_argument("--no_rescore", dest='rescore', action='store_false',
+        help="skip recalculating SAP score, use if you're not doing SAP")
+parser.add_argument("--chunk", dest='chunk', action='store_true',
+        help="design 10 residues at a time, fast but less optimal results")
+parser.add_argument("--lock_HNQST", dest='lock_HNQST', action='store_true',
+        help="lock HIS, ASN, GLN, SER, and THR, to avoid breaking HBNets")
+parser.add_argument("--lock_PG", dest='lock_PG', action='store_true',
+        help="lock PRO and GLY, probably a good idea")
+parser.add_argument("--lock_YW", dest='lock_YW', action='store_true',
+        help="lock TYR and TRP, those are often present for a good reason")
+parser.add_argument("--penalize_ARG", dest='penalize_ARG', 
+        action='store_true',
+        help="add a small penalty to ARG usage, perhaps improving solubility")
+parser.add_argument("--encourage_mutation", dest='encourage_mutation',
+        action='store_true',
+        help="add a composition restraint to bias the design")
+parser.add_argument("--restraint_weight", type=float, default=-1.0,
+        help="negative incentivizes mutation, positive favors the native seq")
 
 
 # Developability index: a rapid in silico tool for the screening of antibody aggregation propensity.
@@ -605,6 +628,8 @@ def my_rstrip(string, strip):
     return string
 # TODO implement actual main? Begin Main:
 def main():
+    if len(sys.argv) == 1:
+        parser.print_help()
     args = parser.parse_args(sys.argv[1:])
     print("Redesign will proceed with the following options:")
     print(args)
@@ -632,10 +657,9 @@ def main():
     redesign_below = args.redesign_below
     # a hack to avoid changing a lot of code don't judge
     use_sc_neighbors = not use_sasa
+    if silent is None:
+        silent = ''
     # TODO add more defense here
-    if (redesign_above != 0 and redesign_below != 0):
-        print("Please select a single cutoff for selecting residues to redesign")
-        raise NotImplementedError
 
     if (silent != ''):
         sfd_in = SilentFileData(SilentFileOptions())
@@ -733,12 +757,12 @@ def main():
                 if residue in lock_resis:
                     continue
                 elif (
-                        redesign_above != 0.0 
+                        redesign_above is not None
                         and residue_score < redesign_above
                         ):
                     continue
                 elif (
-                        redesign_below != 0.0 
+                        redesign_below is not None
                         and residue_score > redesign_below
                         ):
                     continue
