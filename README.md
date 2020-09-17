@@ -22,7 +22,7 @@ Redesign a folder full of pdbs, picking the worst 20 residues by SAP score:
 Redesign a single pdb, without touching HBNet polars or PRO and GLY positions,
 and designing only 10 residues at a time to increase speed:
 ```bash
-~/sap_redesign/sap_redesign/redesign.py --in:file:silent in.silent  --redesign_above 0.6 --lock_PG --lock_HNQST --chunk
+~/sap_redesign/sap_redesign/redesign.py --pdbs YOUR.pdb  --redesign_above 0.6 --lock_PG --lock_HNQST --chunk
 
 ```
 Redesign a all pdbs in a silent file, removing only the worst residues,
