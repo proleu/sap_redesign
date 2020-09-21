@@ -93,7 +93,7 @@ parser.add_argument("--flexbb", dest='flexbb', action='store_true',
         help="turns on flexible bb design")
 parser.add_argument("--use_sasa", dest='use_sasa', action='store_true',
         help="use SASA to designate layers instead of # neighbors")
-parser.add_argument("--cutoffs", type=float, nargs='*', default=[20,40],
+parser.add_argument("--cutoffs", type=float, nargs='*', default=[5.2,2.0],
         help="layer definition cutoffs for SASA or # neighbors")
 parser.add_argument("--lock_resis", type=int, nargs='*', default=[],
         help="list of residue indices not to design, ex 1 7 9 11")

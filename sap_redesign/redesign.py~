@@ -132,7 +132,6 @@ def numba_do_surface_crawl(start, normal, direction, distance, arr, lb, ub, cs, 
     forward_step_size = cs[0] 
     forward_step = forward_step_size * direction
 
-
     fail = np.array([0], np.bool_)
 
     traversed = []
@@ -154,7 +153,6 @@ def numba_do_surface_crawl(start, normal, direction, distance, arr, lb, ub, cs, 
         current = prev + forward_step
 
     return traversed, traveled
-
 
 @njit(fastmath=True,cache=False)
 def numba_add_to_near_grid(pts, store_vals, atom_radius, near_grid, dist_grid, lb, ub, cs, shape):
@@ -182,7 +180,6 @@ def numba_store_near_grid(near_grid, dist_grid, _x, pt, idx, lb, ub, cs, shape):
     # transform bounds into upper and lower corners in voxel array indices
     bounds = xform_vectors( low_high, lb, cs, shape )
 
-
     # translate voxel array indices back to 3d coords and do distance check
     _x2 = _x*_x
      
@@ -200,7 +197,6 @@ def numba_store_near_grid(near_grid, dist_grid, _x, pt, idx, lb, ub, cs, shape):
                     if ( dist2 < dist_grid[i, j, k] ):
                         near_grid[i, j, k] = idx
                         dist_grid[i, j, k] = dist2
-
 
 @njit(fastmath=True,cache=False)
 def numba_make_sum_grid(pts, atom_radius, arr, lb, ub, cs, shape, store_val):
@@ -242,10 +238,6 @@ def numba_indices_add_within_x_of(arr, to_store, _x, pt, lb, ub, cs, shape):
                 z2 = z*z
                 if ( x2 + y2 + z2 < _x2 ):
                     arr[i, j, k] += to_store
-
-
-
-
 
 @njit(fastmath=True,cache=False)
 def numba_make_clashgrid(pts, atom_radius, arr, lb, ub, cs, shape, store_val):
@@ -305,7 +297,6 @@ def numba_index_to_center(vec, lb, cs, shape):
 def numba_ind_index_to_center(i, lb, cs):
     return (i + 0.5) * cs + lb
 
-
 @njit(fastmath=True,cache=False)
 def numba_indices_to_centers(inds, lb, cs):
     out = np.zeros((len(inds), len(lb)), dtype=np.float_)
@@ -313,7 +304,6 @@ def numba_indices_to_centers(inds, lb, cs):
         for j in range(len(lb)):
             out[i, j] = (inds[i, j] + 0.5) * cs[j] + lb[j]
     return out
-
 
 @njit(fastmath=True,cache=False)
 def xform_vectors(vecs, lb, cs, shape):
@@ -368,7 +358,6 @@ def numba_clash_check(pts, max_clashes, arr, lb, cs):
 
     return clashes
 
-
 @njit(fastmath=True,cache=False)
 def numba_ray_trace_many(starts, ends, max_clashes, arr, lb, cs, debug=False):
     clashes = np.zeros(len(starts), np.int_)
@@ -376,8 +365,6 @@ def numba_ray_trace_many(starts, ends, max_clashes, arr, lb, cs, debug=False):
         clashes[i] = numba_ray_trace(starts[i], ends[i], max_clashes, arr, lb, cs, debug)
 
     return clashes
-
-
 
 @njit(fastmath=True,cache=False)
 def numba_ray_trace(start, end, max_clashes, arr, lb, cs, debug=False):
@@ -414,8 +401,6 @@ def numba_ray_trace(start, end, max_clashes, arr, lb, cs, debug=False):
         z += slope[2]
 
     return clashes
-
-
 
 @njit(fastmath=True,cache=False)
 def _lookup_3d(null_val, loc, arr, shape):
@@ -790,8 +775,6 @@ class VoxelArray:
             rnum %= 10000
 
         f.close()
-
-
 
     def clash_check(self, pts, max_clashes):
         assert(self.dim == 3)
